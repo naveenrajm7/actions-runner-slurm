@@ -41,10 +41,12 @@ REST job 68034373 mounted a fresh writable `/runner`, copied the read-only distr
 
 ## GitHub control plane and callback result
 
-GitHub App installation authentication to the `AMD-Alola` organization succeeded with the organization self-hosted-runners write permission. The `adc-slurm-runner` group did not exist, so it was created with selected-repository visibility and public repositories disabled. No repository was granted access during this test. The service then created `slurm-cpu-small` as scale set ID 7 and established its message session with zero queued jobs.
+GitHub App installation authentication to the `AMD-Alola` organization succeeded with the organization self-hosted-runners write permission. The `adc-slurm-runner` group did not exist, so it was created with selected-repository visibility and public repositories disabled. The service then created `slurm-cpu-small` as scale set ID 7 and established its message session.
 
 The runner image was rebuilt with explicit private-CA callback support and imported as a 255 MiB squashfs with SHA-256 `dab1ced83ba73f2835afa8c8ca20758c591f59328254442071e0f91827a043b4`.
 
 Slurm job 68034525 mounted the callback certificate read-only into that image, resolved the login-node service address from a compute node, verified HTTPS, and received a healthy response from `/healthz`. Accounting recorded `COMPLETED`, exit code `0:0`, elapsed time 20 seconds.
 
-JIT delivery and a real Actions workflow remain to be verified after an intended repository is assigned to the selected-visibility runner group.
+`AMD-Alola/adc-netbox-agent` was added as the group's sole selected repository. Push-triggered Actions run [37262346072](https://github.com/AMD-Alola/adc-netbox-agent/actions/runs/37262346072) requested `runs-on: [slurm-cpu-small]`. The listener submitted Slurm job 68034594, the compute allocation claimed its JIT configuration over the verified HTTPS callback, and ephemeral runner `slurm-c6151df4405b` executed repository commit `3413e1083447b69c7f7485478e9f0f57eac7dfd0`.
+
+The job checked out the private repository and verified `SLURM_JOB_ID`, the GitHub Actions environment, and the writable runner distribution. GitHub reported success, the runner removed its credentials and registration, and Slurm accounting recorded `COMPLETED`, exit code `0:0`, with no allocation left in the queue. This completes the first real end-to-end workflow verification.
