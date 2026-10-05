@@ -1,0 +1,64 @@
+---
+title: Deploy with systemd
+description: Install the supplied unit and operate the service safely
+menu-position: 1
+keywords: ['systemd', 'production', 'service']
+---
+
+The release archive includes a hardened systemd unit. Review it against your site's installation paths before enabling it.
+
+## Install the unit
+
+Copy the supplied unit:
+
+```bash
+sudo install -o root -g root -m 0644 \
+  deploy/slurm-gha.service \
+  /etc/systemd/system/slurm-gha.service
+```
+
+Edit these values when they differ at your site:
+
+- `User` and `Group` must name the dedicated service identity.
+- `ExecStart` must reference the installed binary and configuration.
+- `ReadWritePaths` must include the parents of `service.statePath`, `service.logRoot`, and every `scaleSets[].execution.scratchRoot`.
+
+For example, the paths used in the getting-started configuration require:
+
+```ini
+ReadWritePaths=/var/lib/slurm-gha /shared/slurm-gha/logs /shared/slurm-gha/scratch
+```
+
+The configuration, credentials, CA files, TLS private key, image, and service binary should remain read-only to the process.
+
+## Start the service
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now slurm-gha.service
+sudo systemctl status slurm-gha.service
+```
+
+Follow structured service logs:
+
+```bash
+sudo journalctl -u slurm-gha.service -f
+```
+
+Verify readiness after every start:
+
+```bash
+curl --fail https://slurm-gha.example.org:8443/readyz
+```
+
+## Understand shutdown behavior
+
+A normal `SIGTERM` or systemd stop closes GitHub listener sessions and the HTTPS server. It does not delete scale sets, erase state, or cancel running Slurm allocations. The next process reconciles its recorded allocations before accepting new GitHub work.
+
+Only one service instance may use a state database. BoltDB takes an exclusive process lock, so the initial release does not support active-active replicas or shared-database high availability.
+
+## Expose the callback safely
+
+Allow the configured HTTPS port from eligible compute nodes. The callback does not need to be public on the internet if compute nodes can reach a private address that matches the certificate.
+
+Do not expose the state database, credentials, scratch directories, or log directories through the web server. Only `/healthz`, `/readyz`, and authenticated per-lease claim paths are served.

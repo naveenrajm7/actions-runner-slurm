@@ -1,0 +1,65 @@
+---
+title: Configure GitHub authentication
+description: Create a GitHub App, install it, and prepare its private key
+menu-position: 3
+keywords: ['GitHub App', 'private key', 'runner group', 'credentials']
+---
+
+Actions Runner Slurm authenticates with a GitHub App installed on the organization that owns the runner scale sets.
+
+## Create a runner group
+
+In the organization settings, open **Actions**, then **Runner groups**, and create a dedicated group such as `slurm-ci`.
+
+Restrict the group to the private repositories that should be allowed to execute on the cluster. The value of each `scaleSets[].runnerGroup` setting must match this group name exactly.
+
+The service will look up this group at startup. It does not create missing runner groups or change repository access policies.
+
+## Register a GitHub App
+
+Create an organization-owned GitHub App. Webhooks and a callback URL are not required.
+
+Grant these permissions:
+
+| Scope | Permission | Access |
+| --- | --- | --- |
+| Repository | Metadata | Read-only |
+| Organization | Self-hosted runners | Read and write |
+| Repository | Administration | Read and write only when registering a repository-scoped runner scale set |
+
+These permissions follow the authentication requirements for GitHub's runner scale-set APIs. Keep every other permission set to **No access**.
+
+Install the App on the organization. If the installation is restricted to selected repositories, include every repository that will use a Slurm runner.
+
+## Record the identifiers
+
+You need two identifiers from the GitHub App:
+
+- **Client ID**, configured as `github.app.clientId`.
+- **Installation ID**, the number at the end of the installed App URL, configured as `github.app.installationId`.
+
+For example, the installation ID in this URL is `654321`:
+
+```text
+https://github.com/organizations/example-org/settings/installations/654321
+```
+
+<Note variant="warning">
+  The configuration expects the GitHub App Client ID, not the numeric App ID.
+</Note>
+
+## Store the private key
+
+Generate a private key on the GitHub App settings page. Copy the downloaded PEM file to the service host and make it readable only by the service identity.
+
+```bash
+sudo install -o github-ci -g github-ci -m 0600 \
+  ./example-org-actions-runner-slurm.pem \
+  /run/secrets/github-app.pem
+```
+
+The service refuses to start if the key is group- or world-accessible.
+
+Do not place the private key contents in `config.yaml`, a shell command, the repository, or a container image. The configuration stores only the absolute path to the key.
+
+Next, [prepare Slurm REST authentication](/getting-started/slurm/).

@@ -1,0 +1,91 @@
+---
+title: Run your first workflow
+description: Start the service, verify readiness, and execute a job on Slurm
+menu-position: 7
+keywords: ['serve', 'health check', 'workflow', 'runs-on']
+---
+
+Start Actions Runner Slurm in the foreground for the first verification. Use a second terminal for health checks and logs.
+
+```bash
+sudo -u github-ci /usr/local/bin/slurm-gha serve \
+  --config /etc/slurm-gha/config.yaml
+```
+
+At startup the service:
+
+1. Opens and locks the state database.
+2. Checks `slurmrestd` readiness.
+3. Looks up each configured GitHub runner group.
+4. Creates a missing runner scale set or reuses the existing one.
+5. Reconciles owned Slurm allocations.
+6. Opens the HTTPS callback and GitHub message listeners.
+
+The service is ready when its structured log contains `service ready`.
+
+## Check health and readiness
+
+From a host that trusts the callback certificate, query both endpoints:
+
+```bash
+curl --fail https://slurm-gha.example.org:8443/healthz
+curl --fail https://slurm-gha.example.org:8443/readyz
+```
+
+Expected responses are:
+
+```json
+{"status":"ok"}
+```
+
+```json
+{"ready":true}
+```
+
+`/healthz` reports that the HTTPS process is responding. `/readyz` becomes successful only after startup checks and listener initialization have completed.
+
+## Add a test workflow
+
+In a repository allowed to use the configured runner group, create `.github/workflows/slurm-smoke.yml`:
+
+```yaml
+name: Slurm runner smoke test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: slurm-cpu-small
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show the allocation
+        run: |
+          hostname
+          echo "SLURM_JOB_ID=${SLURM_JOB_ID}"
+          test -n "${SLURM_JOB_ID}"
+```
+
+The `runs-on` value must exactly match `scaleSets[].name`.
+
+Run the workflow manually. The GitHub listener should request capacity, the service should submit one Slurm job, and an ephemeral runner should appear briefly in the organization runner settings.
+
+## Verify cleanup
+
+After the workflow completes:
+
+- GitHub should report the job result.
+- The disposable runner should remove its registration.
+- Slurm should record a terminal allocation.
+- No owned allocation should remain in the queue.
+- Runner diagnostics should remain under `service.logRoot/<scale-set>/<lease-id>/`.
+- The disposable directory below `scratchRoot/slurm-gha/<lease-id>/` should be removed.
+
+Inspect durable lease state when diagnosing a run:
+
+```bash
+sudo -u github-ci /usr/local/bin/slurm-gha status \
+  --config /etc/slurm-gha/config.yaml
+```
+
+Stop the foreground process after the test and [install the systemd service](/deploy/systemd/).

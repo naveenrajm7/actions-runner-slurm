@@ -1,0 +1,61 @@
+---
+title: Install the binary
+description: Download a release archive and prepare the service directories
+menu-position: 2
+keywords: ['install', 'binary', 'release']
+---
+
+Actions Runner Slurm is distributed as a static Linux binary for `amd64` and `arm64`. Install it wherever your site runs long-lived services with access to GitHub, `slurmrestd`, and the shared cluster filesystems.
+
+## Download a release
+
+Set `VERSION` to the release you want to install and select the architecture of the service host.
+
+```bash
+VERSION=v0.1.0
+ARCH=amd64
+ARCHIVE="slurm-gha_${VERSION#v}_linux_${ARCH}.tar.gz"
+
+curl --fail --location --remote-name \
+  "https://github.com/naveenrajm7/actions-runner-slurm/releases/download/${VERSION}/${ARCHIVE}"
+curl --fail --location --remote-name \
+  "https://github.com/naveenrajm7/actions-runner-slurm/releases/download/${VERSION}/${ARCHIVE}.sha256"
+sha256sum --check "${ARCHIVE}.sha256"
+tar -xzf "${ARCHIVE}"
+```
+
+<Note>
+  Replace `v0.1.0` with an existing release tag. The checksum file is published beside each archive.
+</Note>
+
+Install the binary and confirm the embedded version.
+
+```bash
+sudo install -o root -g root -m 0755 \
+  "slurm-gha_${VERSION#v}_linux_${ARCH}/slurm-gha" \
+  /usr/local/bin/slurm-gha
+
+/usr/local/bin/slurm-gha version
+```
+
+You can use a different destination. Update the systemd `ExecStart` path if you do.
+
+## Create the service identity and directories
+
+Create a dedicated Unix identity according to your site's account-management policy. The examples in this documentation use `github-ci`.
+
+```bash
+sudo install -d -o github-ci -g github-ci -m 0700 /var/lib/slurm-gha
+sudo install -d -o github-ci -g github-ci -m 0700 /var/log/slurm-gha
+sudo install -d -o root -g github-ci -m 0750 /etc/slurm-gha
+sudo install -d -o root -g github-ci -m 0750 /run/secrets
+```
+
+The service account must be able to:
+
+- read its GitHub App key, Slurm JWT, JIT encryption key, configuration, and CA files;
+- write its state database and job log directories;
+- create lease directories below each configured `scratchRoot`;
+- submit, inspect, and cancel Slurm jobs through `slurmrestd`.
+
+Next, [create the GitHub App credentials](/getting-started/github-app/).

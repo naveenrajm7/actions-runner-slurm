@@ -1,0 +1,48 @@
+---
+title: Security model
+description: Understand credentials, isolation, callback verification, and workflow trust
+menu-position: 2
+keywords: ['security', 'credentials', 'TLS', 'isolation']
+---
+
+The initial security boundary assumes trusted private repositories, a dedicated Unix and Slurm identity, restricted GitHub runner groups, and carefully selected mounts.
+
+<Note variant="warning">
+  Pyxis and Enroot provide disposable filesystems, not hostile multi-tenant isolation. Workflow code runs with the Slurm identity's kernel privileges, network reachability, and access to configured mounts.
+</Note>
+
+## Long-lived credentials
+
+The service reads three sensitive files:
+
+- The GitHub App private key.
+- The Slurm JWT.
+- The JIT response encryption key.
+
+Each file must be readable by the service identity and must not be group- or world-accessible. Store secrets outside the repository and outside the runner image. The configuration contains only absolute paths.
+
+The Slurm JWT is re-read for every REST request, allowing atomic renewal. The GitHub App key and JIT encryption key are loaded at process startup and require a restart after replacement.
+
+## Per-allocation claim
+
+Before submission, the service creates a random 256-bit claim credential and stores only its SHA-256 digest. The plaintext travels in the Slurm job environment and authorizes one lease until registration, terminal state, or expiry.
+
+Administrators and users who can inspect another job's environment may be able to see this credential. Slurm visibility and process inspection must therefore be restricted according to the site's trust model.
+
+The service returns JIT data only after verifying the claim, job ID, cluster when available, correlation comment, allocation phase, and restart count. Retryable JIT content is encrypted with AES-256-GCM in the state database and bound to the lease ID.
+
+## TLS
+
+The runner callback always uses HTTPS. TLS verification cannot be disabled. For a private CA, the service mounts `service.tls.caFile` read-only into the allocation and the bootstrap passes it explicitly to `curl`.
+
+Use HTTPS for `slurmrestd` as well. Configure `slurm.caFile` for a private Slurm CA; `slurm.insecureSkipVerify: true` is rejected.
+
+## Filesystem exposure
+
+By default, the launcher disables the home mount and the container entrypoint. It creates a fresh private runner directory and removes it after the allocation step. Diagnostics are copied to the configured log directory.
+
+Keep `mountHome: false`. Add `extraMounts` only after reviewing what untrusted workflow commands could read or modify. Prefer read-only mounts and dedicated, narrowly scoped data paths.
+
+## GitHub access policy
+
+Use a dedicated runner group with selected-repository access and keep public repository access disabled. A pull request from a fork can cause workflow code to execute if repository and workflow policy allow it; runner-group selection alone does not make public workflows safe.

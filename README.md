@@ -2,6 +2,8 @@
 
 `slurm-gha` provisions ephemeral GitHub Actions runner scale-set workers as Slurm allocations. GitHub matches jobs and the official `actions/runner` executes them; Slurm provides scheduling, resource enforcement, accounting, and Pyxis/Enroot container startup.
 
+The user documentation is published at [naveenrajm7.github.io/actions-runner-slurm](https://naveenrajm7.github.io/actions-runner-slurm/). Start with the [prerequisites](https://naveenrajm7.github.io/actions-runner-slurm/getting-started/prerequisites/) and the guided installation.
+
 The implementation currently includes:
 
 - strict `slurm-gha/v1alpha1` configuration and resource validation;
@@ -81,4 +83,4 @@ Security and lifecycle details are in [docs/design.md](docs/design.md). The init
 
 ## Current boundary
 
-Pyxis execution is implemented. Native execution, metrics, drain administration, accounting fallback for fast-finished jobs, and the full failure/concurrency campaign remain subsequent milestones. The Slurm adapter deliberately uses the working batched `/jobs/` endpoint because this deployment's v0.0.42 single-job endpoint returned `Invalid JobID` for a live job.
+The initial release supports Pyxis/Enroot container execution only. Native execution, metrics, drain administration, accounting fallback for fast-finished jobs, and the full failure/concurrency campaign remain subsequent milestones. The Slurm adapter deliberately uses the working batched `/jobs/` endpoint because this deployment's v0.0.42 single-job endpoint returned `Invalid JobID` for a live job.

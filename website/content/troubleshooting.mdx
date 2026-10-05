@@ -1,0 +1,137 @@
+---
+title: Troubleshooting
+description: Diagnose configuration, authentication, scheduling, callback, and runner failures
+menu-position: 7
+keywords: ['troubleshooting', 'logs', 'queued', 'TLS']
+---
+
+Start with the narrowest failing boundary. Actions Runner Slurm connects four systems: GitHub, the service process, `slurmrestd`, and the Pyxis allocation.
+
+## Collect the basic state
+
+Run these checks before changing configuration or deleting state:
+
+```bash
+sudo systemctl status slurm-gha.service
+sudo journalctl -u slurm-gha.service --since "30 minutes ago"
+
+sudo -u github-ci slurm-gha validate-config \
+  --config /etc/slurm-gha/config.yaml
+sudo -u github-ci slurm-gha doctor \
+  --config /etc/slurm-gha/config.yaml
+
+squeue -u github-ci -o '%.18i %.12P %.24j %.10T %.30R %.40k'
+```
+
+The Slurm comment shown by `%k` should use the `slurm-gha/<lease-id>` ownership marker.
+
+Do not remove the BoltDB file to clear an error. It contains the durable relationship between GitHub runners and Slurm jobs.
+
+## The service does not start
+
+### Configuration is rejected
+
+Run `validate-config` directly. The parser rejects unknown keys as well as missing or invalid values. Common causes include:
+
+- A missing `apiVersion: slurm-gha/v1alpha1`.
+- Relative file or directory paths.
+- A non-HTTPS `service.publicUrl` or `github.configUrl`.
+- `nodes` or `tasks` set to a value other than `1`.
+- `maxPending` greater than `maxRunners`.
+- `execution.mode: native` in the initial release.
+
+### A credential has unsafe permissions
+
+The GitHub App key, Slurm token, and JIT encryption key must not grant any group or world permissions.
+
+```bash
+chmod 0600 /run/secrets/github-app.pem
+chmod 0600 /run/secrets/slurm-jwt
+chmod 0600 /run/secrets/slurm-gha-jit-key
+chown github-ci:github-ci /run/secrets/github-app.pem \
+  /run/secrets/slurm-jwt \
+  /run/secrets/slurm-gha-jit-key
+```
+
+### The state database is locked
+
+Only one process can open the BoltDB state file. Check for a foreground test process and the systemd unit before starting another copy.
+
+```bash
+systemctl status slurm-gha.service
+pgrep -a slurm-gha
+```
+
+Do not copy a live BoltDB file or bypass the process lock.
+
+## GitHub authentication fails
+
+Check that:
+
+- `github.app.clientId` is the Client ID, not the numeric App ID.
+- `github.app.installationId` comes from the installation URL.
+- The App is installed on the owner named by `github.configUrl`.
+- The App has organization **Self-hosted runners: Read and write** permission.
+- The configured runner group already exists and its name matches exactly.
+- The App installation and runner group both permit the target repository.
+
+If a workflow remains queued without a Slurm submission, compare `runs-on` with `scaleSets[].name` and inspect the listener logs.
+
+## Slurm REST checks fail
+
+An HTTP 401 or 403 usually indicates a missing, expired, or mismatched JWT. Confirm that `slurm.user` matches the token identity and that the renewal process replaced the configured file atomically.
+
+For TLS failures, confirm that `slurm.caFile` contains the CA that issued the `slurmrestd` certificate. Do not set `insecureSkipVerify`; the service rejects it.
+
+If `doctor` succeeds but submissions fail, verify partition, account, QOS, memory, GRES, and site policy by running `slurm-smoke` with the same identity and resource choices.
+
+## The allocation remains pending
+
+Inspect the pending reason:
+
+```bash
+squeue -u github-ci -o '%.18i %.10T %.40R %.40k'
+```
+
+Normal cluster scheduling constraints still apply. `maxQueueWait` determines how long the runner's claim remains valid; it does not give the job scheduling priority. Increase it only when the site's expected queue time requires it.
+
+## The allocation cannot claim JIT configuration
+
+From a compute allocation, test DNS, routing, and certificate trust to `service.publicUrl`:
+
+```bash
+curl --fail --cacert /path/to/callback-ca.crt \
+  https://slurm-gha.example.org:8443/healthz
+```
+
+Check that:
+
+- `service.publicUrl` resolves to the service from compute nodes.
+- The certificate contains the hostname used in `publicUrl`.
+- `service.tls.caFile` contains the correct private CA and is readable on the service host.
+- The configured CA source path can be mounted by Pyxis.
+- Firewalls allow compute nodes to reach the callback port.
+- Slurm still reports the job as starting or running with the expected correlation comment and no restart.
+
+The bootstrap retries transient claim failures. Repeated `409 Conflict` responses generally mean the allocation binding or Slurm verification is not ready; persistent conflicts require checking the stored job ID and Slurm state.
+
+## The runner starts but the workflow fails
+
+Inspect the per-lease directory under `service.logRoot/<scale-set>/<lease-id>/`:
+
+- `slurm.out` and `slurm.err` contain allocation and Pyxis output.
+- Copied `_diag` files contain official Actions runner diagnostics.
+
+Confirm that the immutable image includes every tool required by the workflow. Container actions, job containers, and service containers fail because the initial runner environment does not provide a Docker daemon.
+
+## An allocation appears orphaned
+
+Compare all three ownership values before canceling anything:
+
+1. The job ID recorded by `slurm-gha status`.
+2. The live Slurm job ID.
+3. The Slurm comment `slurm-gha/<lease-id>`.
+
+The controller deliberately refuses unsafe cancellation when ownership does not match. Preserve the state database and job records when reporting a reconciliation issue.
+
+If the problem persists, open a GitHub issue with secrets removed and include the service version, Slurm/Pyxis/Enroot versions, relevant structured logs, sanitized configuration, Slurm state and comment, and runner `_diag` excerpts.
