@@ -1,0 +1,30 @@
+{
+  "jobs": [
+    {
+      "job_id": 12345,
+      "name": "gha-slurm-cpu-small",
+      "user_name": "github-ci",
+      "cluster": "cluster",
+      "job_state": ["RUNNING"],
+      "state_reason": "None",
+      "state_description": "",
+      "comment": "slurm-gha/0123456789abcdef0123456789abcdef",
+      "extra": "",
+      "partition": "cpu",
+      "account": "ci",
+      "nodes": "compute-001",
+      "requeue": false,
+      "restart_cnt": 0,
+      "exit_code": {
+        "status": ["SUCCESS"],
+        "return_code": {"set": true, "infinite": false, "number": 0},
+        "signal": {"id": {"set": false, "infinite": false, "number": 0}, "name": ""}
+      },
+      "submit_time": {"set": true, "infinite": false, "number": 1791165600},
+      "start_time": {"set": true, "infinite": false, "number": 1791165610},
+      "end_time": {"set": false, "infinite": false, "number": 0}
+    }
+  ],
+  "errors": [],
+  "warnings": []
+}

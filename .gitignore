@@ -1,0 +1,9 @@
+.tools/
+bin/
+dist/
+*.db
+*.db-shm
+*.db-wal
+*.log
+.env
+slurm-gha-smoke-*/

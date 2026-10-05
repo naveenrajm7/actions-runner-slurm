@@ -1,0 +1,50 @@
+apiVersion: slurm-gha/v1alpha1
+
+service:
+  listenAddress: "0.0.0.0:8443"
+  publicUrl: "https://slurm-gha.example.org:8443"
+  statePath: "/var/lib/slurm-gha/state.db"
+  jitEncryptionKeyFile: "/run/secrets/slurm-gha-jit-key"
+  logRoot: "/var/log/slurm-gha/jobs"
+  reconcileInterval: "15s"
+  tls:
+    certificateFile: "/etc/slurm-gha/tls.crt"
+    keyFile: "/etc/slurm-gha/tls.key"
+
+github:
+  configUrl: "https://github.com/example-org"
+  app:
+    clientId: "Iv1.example"
+    installationId: 12345
+    privateKeyFile: "/run/secrets/github-app.pem"
+
+slurm:
+  baseUrl: "https://slurm-api.example.org"
+  apiVersion: "v0.0.42"
+  user: "github-ci"
+  tokenFile: "/run/secrets/slurm-jwt"
+  caFile: "/etc/slurm-gha/cluster-ca.pem"
+  requestTimeout: "30s"
+
+scaleSets:
+  - name: "slurm-cpu-small"
+    runnerGroup: "slurm-ci"
+    maxRunners: 10
+    maxPending: 10
+    maxQueueWait: "2h"
+    startupTimeout: "10m"
+    slurm:
+      partition: "cpu"
+      account: "ci"
+      qos: "normal"
+      nodes: 1
+      tasks: 1
+      cpusPerTask: 4
+      memory: "16G"
+      walltime: "01:00:00"
+    execution:
+      mode: "pyxis"
+      image: "/cluster/images/actions-runner-2.337.0.sqsh"
+      scratchRoot: "/scratch/github-ci"
+      mountHome: false
+      extraMounts: []

@@ -1,0 +1,21 @@
+[Unit]
+Description=GitHub Actions ephemeral runners on Slurm
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=github-ci
+Group=github-ci
+ExecStart=/usr/local/bin/slurm-gha serve --config /etc/slurm-gha/config.yaml
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/slurm-gha /var/log/slurm-gha
+
+[Install]
+WantedBy=multi-user.target
