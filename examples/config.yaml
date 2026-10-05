@@ -10,6 +10,9 @@ service:
   tls:
     certificateFile: "/etc/slurm-gha/tls.crt"
     keyFile: "/etc/slurm-gha/tls.key"
+    # Set for a private CA or a self-signed certificate; it is mounted read-only
+    # into each runner allocation for callback verification.
+    caFile: "/etc/slurm-gha/callback-ca.crt"
 
 github:
   configUrl: "https://github.com/example-org"

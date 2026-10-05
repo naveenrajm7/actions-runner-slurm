@@ -40,8 +40,12 @@ chmod 0600 "$claim_payload"
 unset SLURM_GHA_CLAIM_TOKEN
 
 claim_url="${SLURM_GHA_SERVICE_URL%/}/api/v1/leases/${SLURM_GHA_LEASE_ID}/claim"
+curl_tls_args=()
+if [ -n "${SLURM_GHA_CA_FILE:-}" ]; then
+  curl_tls_args+=(--cacert "$SLURM_GHA_CA_FILE")
+fi
 attempt=0
-until curl --config "$claim_config" --fail --silent --show-error \
+until curl --config "$claim_config" "${curl_tls_args[@]}" --fail --silent --show-error \
   --connect-timeout 10 --max-time 60 --request POST \
   --header 'Content-Type: application/json' --data-binary "@$claim_payload" \
   --output "$jit_file" "$claim_url"; do
@@ -58,7 +62,7 @@ rm -f -- "$claim_config" "$claim_payload"
 ACTIONS_RUNNER_INPUT_JITCONFIG="$(<"$jit_file")"
 export ACTIONS_RUNNER_INPUT_JITCONFIG
 rm -f -- "$jit_file"
-unset SLURM_GHA_SERVICE_URL SLURM_GHA_LEASE_ID SLURM_GHA_CLASS
+unset SLURM_GHA_SERVICE_URL SLURM_GHA_LEASE_ID SLURM_GHA_CLASS SLURM_GHA_CA_FILE
 
 cd "$runner_root"
 if [ "$(id -u)" -eq 0 ]; then

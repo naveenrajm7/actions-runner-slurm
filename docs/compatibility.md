@@ -31,7 +31,7 @@ REST job 68034290 requested one node, one task, one CPU, 512 MiB, and five minut
 
 Inside the container it printed the compute hostname and allocation ID, resolved `github.com`, and opened TCP port 443. Slurm accounting recorded `COMPLETED`, exit code `0:0`, elapsed time 16 seconds. No named smoke allocation remained in `squeue` afterward.
 
-This verifies REST submission, Pyxis startup, compute DNS, and GitHub network egress. It does not yet verify the runner image, compute-to-service TLS trust, GitHub App authentication, scale-set registration, or a real Actions workflow.
+This verifies REST submission, Pyxis startup, compute DNS, and GitHub network egress.
 
 ## Runner image result
 
@@ -39,4 +39,12 @@ The pinned Dockerfile built successfully and was imported by Enroot as a 255 MiB
 
 REST job 68034373 mounted a fresh writable `/runner`, copied the read-only distribution there, and executed `Runner.Listener --version`. It reported `2.337.0`, reached GitHub TCP/443, and completed with exit code `0:0` in 55 seconds. This also confirmed why the copy is required: an earlier diagnostic invocation directly from squashfs could not create `/opt/actions-runner/_diag`; the production bootstrap has always used the writable-copy path.
 
-Compute-to-service TLS trust, GitHub App authentication, scale-set registration, JIT delivery, and a real Actions workflow remain to be verified with deployment credentials and a stable callback URL.
+## GitHub control plane and callback result
+
+GitHub App installation authentication to the `AMD-Alola` organization succeeded with the organization self-hosted-runners write permission. The `adc-slurm-runner` group did not exist, so it was created with selected-repository visibility and public repositories disabled. No repository was granted access during this test. The service then created `slurm-cpu-small` as scale set ID 7 and established its message session with zero queued jobs.
+
+The runner image was rebuilt with explicit private-CA callback support and imported as a 255 MiB squashfs with SHA-256 `dab1ced83ba73f2835afa8c8ca20758c591f59328254442071e0f91827a043b4`.
+
+Slurm job 68034525 mounted the callback certificate read-only into that image, resolved the login-node service address from a compute node, verified HTTPS, and received a healthy response from `/healthz`. Accounting recorded `COMPLETED`, exit code `0:0`, elapsed time 20 seconds.
+
+JIT delivery and a real Actions workflow remain to be verified after an intended repository is assigned to the selected-visibility runner group.

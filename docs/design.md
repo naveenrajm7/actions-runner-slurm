@@ -26,4 +26,6 @@ JIT is returned with `Cache-Control: no-store`. A response cached for retry is e
 
 Pyxis/Enroot provides disposable filesystems, not hostile multi-tenant isolation. Workflow code runs as the Slurm Unix identity and can access explicitly configured mounts and reachable cluster services. Initial use is restricted to trusted private repositories, runner-group policy, a dedicated service identity, no home mount, and minimal read-only extra mounts.
 
+The bootstrap callback always uses HTTPS. When `service.tls.caFile` is configured, the launcher mounts that CA certificate read-only into the runner container and curl uses it explicitly; TLS verification is never disabled.
+
 Docker container actions, job containers, and service containers are outside the initial boundary.

@@ -9,7 +9,10 @@ import (
 )
 
 func TestRenderPyxisDoesNotPutSecretsInScript(t *testing.T) {
-	service := config.ServiceConfig{PublicURL: "https://service.example", LogRoot: "/logs"}
+	service := config.ServiceConfig{
+		PublicURL: "https://service.example", LogRoot: "/logs",
+		TLS: config.TLSConfig{CAFile: "/secrets/callback-ca.crt"},
+	}
 	class := config.ScaleSetConfig{Name: "cpu", Execution: config.ExecutionConfig{Mode: "pyxis", Image: "/cluster/images/runner.sqsh", ScratchRoot: "/scratch"}}
 	lease := store.Lease{ID: "0123456789abcdef0123456789abcdef"}
 	rendered, err := RenderPyxis(service, class, lease, "top-secret-claim")
@@ -24,5 +27,11 @@ func TestRenderPyxisDoesNotPutSecretsInScript(t *testing.T) {
 	}
 	if rendered.Environment["SLURM_GHA_CLAIM_TOKEN"] != "top-secret-claim" {
 		t.Fatal("claim credential missing from job environment")
+	}
+	if rendered.Environment["SLURM_GHA_CA_FILE"] != "/etc/slurm-gha/callback-ca.crt" {
+		t.Fatal("callback CA path missing from job environment")
+	}
+	if !strings.Contains(rendered.Script, "/secrets/callback-ca.crt:/etc/slurm-gha/callback-ca.crt:ro") {
+		t.Fatal("callback CA is not mounted read-only")
 	}
 }

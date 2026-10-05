@@ -39,6 +39,7 @@ type ServiceConfig struct {
 type TLSConfig struct {
 	CertificateFile string `yaml:"certificateFile"`
 	KeyFile         string `yaml:"keyFile"`
+	CAFile          string `yaml:"caFile"`
 }
 
 type GitHubConfig struct {
@@ -160,6 +161,11 @@ func (c *Config) Validate() error {
 	}
 	if err := requireAbsolute("service.tls.keyFile", c.Service.TLS.KeyFile); err != nil {
 		errs = append(errs, err)
+	}
+	if c.Service.TLS.CAFile != "" {
+		if err := requireAbsolute("service.tls.caFile", c.Service.TLS.CAFile); err != nil {
+			errs = append(errs, err)
+		}
 	}
 
 	if err := validateHTTPSURL("github.configUrl", c.GitHub.ConfigURL); err != nil {

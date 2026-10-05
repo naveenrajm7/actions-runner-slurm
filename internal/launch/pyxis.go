@@ -31,6 +31,9 @@ func RenderPyxis(service config.ServiceConfig, class config.ScaleSetConfig, leas
 	leaseRoot := filepath.Join(class.Execution.ScratchRoot, "slurm-gha", lease.ID)
 	logDir := filepath.Join(service.LogRoot, class.Name, lease.ID)
 	mounts := []string{leaseRoot + ":/runner", logDir + ":/runner-logs"}
+	if service.TLS.CAFile != "" {
+		mounts = append(mounts, service.TLS.CAFile+":/etc/slurm-gha/callback-ca.crt:ro")
+	}
 	for _, mount := range class.Execution.ExtraMounts {
 		entry := mount.Source + ":" + mount.Destination
 		if mount.ReadOnly {
@@ -81,17 +84,21 @@ case "$lease_root" in
 esac
 exit "$status"
 `, shellQuote(leaseRoot), shellQuote(logDir), strings.Join(quoted, " "), shellQuote(class.Execution.ScratchRoot), lease.ID)
+	environment := map[string]string{
+		"PATH":                  "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+		"SLURM_GHA_SERVICE_URL": strings.TrimSuffix(service.PublicURL, "/"),
+		"SLURM_GHA_LEASE_ID":    lease.ID,
+		"SLURM_GHA_CLASS":       class.Name,
+		"SLURM_GHA_CLAIM_TOKEN": claimToken,
+	}
+	if service.TLS.CAFile != "" {
+		environment["SLURM_GHA_CA_FILE"] = "/etc/slurm-gha/callback-ca.crt"
+	}
 	return RenderedJob{
 		Script: script, WorkingDirectory: class.Execution.ScratchRoot,
 		StandardOutput: filepath.Join(logDir, "slurm.out"), StandardError: filepath.Join(logDir, "slurm.err"),
 		ScratchDirectory: leaseRoot, LogDirectory: logDir,
-		Environment: map[string]string{
-			"PATH":                  "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-			"SLURM_GHA_SERVICE_URL": strings.TrimSuffix(service.PublicURL, "/"),
-			"SLURM_GHA_LEASE_ID":    lease.ID,
-			"SLURM_GHA_CLASS":       class.Name,
-			"SLURM_GHA_CLAIM_TOKEN": claimToken,
-		},
+		Environment: environment,
 	}, nil
 }
 
