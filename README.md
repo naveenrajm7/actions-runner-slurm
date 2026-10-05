@@ -24,6 +24,19 @@ go test ./...
 go build -trimpath -o bin/slurm-gha ./cmd/slurm-gha
 ```
 
+Pull requests and pushes to `main` run formatting, module consistency, vet,
+race-enabled tests, and a clean build in GitHub Actions.
+
+## Release
+
+Create and publish a GitHub Release with a semantic version tag such as
+`v0.1.0`. The release workflow reruns the test workflow, builds static Linux
+archives for amd64 and arm64, embeds the version and commit in the binary, and
+attaches each archive and its SHA-256 checksum to the GitHub Release.
+
+The release workflow accepts prerelease tags such as `v0.2.0-rc.1`. GitHub
+automatically supplies the source archives in addition to the binary assets.
+
 Validate a configuration before starting the service:
 
 ```bash
