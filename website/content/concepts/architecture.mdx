@@ -1,0 +1,41 @@
+---
+title: Architecture
+description: Understand how GitHub scale sets become disposable Slurm allocations
+menu-position: 1
+keywords: ['architecture', 'scale set', 'lifecycle', 'JIT']
+---
+
+Actions Runner Slurm connects GitHub's runner scale-set control plane to a Slurm cluster. It is not a Kubernetes controller and does not require Actions Runner Controller.
+
+## Components
+
+| Component | Responsibility |
+| --- | --- |
+| GitHub Actions | Queues workflow jobs and calculates the desired runner count for each scale set. |
+| `slurm-gha` | Listens for scale-set messages, creates durable leases, submits and reconciles Slurm jobs, and issues JIT runner configuration. |
+| `slurmrestd` | Authenticates the service identity and exposes job submission, listing, and cancellation. |
+| Slurm | Queues allocations, enforces resources, schedules nodes, and records accounting state. |
+| Pyxis and Enroot | Start the immutable runner image and mount disposable work and diagnostic directories. |
+| Official Actions runner | Executes one GitHub Actions job and then removes its ephemeral registration. |
+
+## Provisioning flow
+
+1. GitHub sends a desired runner count to the scale-set listener.
+2. The service writes a lease to BoltDB before submitting anything to Slurm.
+3. It submits a one-node, one-task Slurm job with a correlation comment in the form `slurm-gha/<lease-id>`.
+4. Slurm schedules the allocation and Pyxis starts the configured SquashFS image.
+5. The bootstrap posts its lease credential and Slurm job ID to the service's HTTPS claim endpoint.
+6. The service verifies the token, allocation ID, correlation comment, phase, and restart count against `slurmrestd`.
+7. The service asks GitHub for a just-in-time runner configuration and returns it to the allocation.
+8. The official runner executes one workflow job.
+9. GitHub and Slurm lifecycle updates are persisted independently, and the disposable work directory is removed.
+
+## Reconciliation
+
+Every submission carries a random, non-secret correlation ID. If a REST submission result is ambiguous, the service searches the Slurm job list and adopts exactly one matching allocation. It refuses duplicate matches.
+
+During scale-down, the service cancels only pending jobs whose stored job ID and Slurm correlation comment both match. It does not cancel running jobs simply because desired capacity decreased.
+
+## Capacity limits
+
+`maxRunners` caps all active capacity for a scale set. `maxPending` separately caps runners that have not finished registration, protecting the Slurm queue from an unbounded burst.

@@ -1,0 +1,120 @@
+---
+title: Configuration reference
+description: Reference every supported v1alpha1 configuration field
+menu-position: 1
+keywords: ['configuration', 'schema', 'YAML', 'v1alpha1']
+---
+
+Actions Runner Slurm loads one strict YAML document. Unknown fields, missing required values, insecure file settings, and invalid resource shapes prevent startup.
+
+## Top-level fields
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `apiVersion` | Yes | Must be `slurm-gha/v1alpha1`. |
+| `service` | Yes | Callback, state, log, reconciliation, and TLS settings. |
+| `github` | Yes | GitHub organization and GitHub App settings. |
+| `slurm` | Yes | `slurmrestd` endpoint and authentication settings. |
+| `scaleSets` | Yes | One or more fixed GitHub-to-Slurm runner classes. |
+
+## `service`
+
+| Field | Required | Default | Constraints and purpose |
+| --- | --- | --- | --- |
+| `listenAddress` | Yes | — | Address passed to the HTTPS server, for example `0.0.0.0:8443`. |
+| `publicUrl` | Yes | — | Absolute HTTPS URL that compute nodes use for the JIT callback. |
+| `statePath` | Yes | — | Absolute BoltDB path. Only one process can open it. |
+| `jitEncryptionKeyFile` | Yes | — | Absolute path to a mode-`0600` 32-byte key encoded as hex or base64. |
+| `logRoot` | Yes | — | Absolute parent for per-scale-set, per-lease Slurm and runner diagnostics. |
+| `reconcileInterval` | No | `15s` | Go duration of at least one second. |
+| `tls.certificateFile` | Yes | — | Absolute server certificate path. |
+| `tls.keyFile` | Yes | — | Absolute TLS private-key path. Certificate and key must be set together. |
+| `tls.caFile` | No | — | Absolute private CA certificate mounted read-only into allocations for callback verification. |
+
+## `github`
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `configUrl` | Yes | Absolute HTTPS repository or organization URL. Organization scope is the verified initial deployment. |
+| `app.clientId` | Yes | GitHub App Client ID such as `Iv1.example`; this is not the numeric App ID. |
+| `app.installationId` | Yes | Positive numeric installation ID. |
+| `app.privateKeyFile` | Yes | Absolute PEM path. The file must not be group- or world-accessible. |
+
+The initial release supports GitHub App authentication only.
+
+## `slurm`
+
+| Field | Required | Default | Constraints and purpose |
+| --- | --- | --- | --- |
+| `baseUrl` | Yes | — | Absolute `http` or `https` URL for `slurmrestd`. HTTPS is recommended. |
+| `apiVersion` | Yes | — | REST data parser identifier. Use the verified `v0.0.42` contract. |
+| `user` | Yes | — | Value sent in `X-SLURM-USER-NAME`; the JWT must represent this user. |
+| `tokenFile` | Yes | — | Absolute file containing a bare JWT or one `SLURM_JWT=...` line. Mode must exclude group and world access. |
+| `caFile` | No | — | Absolute private CA bundle for `slurmrestd`. System CAs remain available. |
+| `requestTimeout` | No | `30s` | Positive Go duration applied to REST requests. |
+| `insecureSkipVerify` | No | `false` | Reserved safety field. `true` is always rejected. |
+
+The token file is read before every request, so atomic token rotation does not require a restart.
+
+## `scaleSets[]`
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `name` | Yes | GitHub scale-set name and workflow `runs-on` value. Must be 1–64 letters, digits, `.`, `_`, or `-`, beginning with a letter or digit. Names must be unique. |
+| `runnerGroup` | Yes | Existing GitHub organization runner-group name. |
+| `maxRunners` | Yes | Positive cap on total active capacity for this class. |
+| `maxPending` | Yes | Positive cap on unregistered capacity; cannot exceed `maxRunners`. |
+| `maxQueueWait` | Yes | Positive Go duration used in claim expiry planning. |
+| `startupTimeout` | Yes | Positive Go duration used in claim expiry planning. |
+| `slurm` | Yes | Fixed Slurm resource request. |
+| `execution` | Yes | Pyxis image, scratch, home, and mount settings. |
+
+## `scaleSets[].slurm`
+
+| Field | Required | Constraints and purpose |
+| --- | --- | --- |
+| `partition` | Yes | Slurm partition. |
+| `account` | Yes | Slurm account. |
+| `qos` | No | Optional Slurm QOS. |
+| `nodes` | Yes | Must be `1` in `v1alpha1`. |
+| `tasks` | Yes | Must be `1` to prevent duplicate runner processes. |
+| `cpusPerTask` | Yes | Positive CPU count. |
+| `memory` | Yes | Positive integer followed by `K`, `M`, `G`, or `T`, for example `16G`. |
+| `gres` | No | Optional generic resource such as `gpu:1`; converted to the matching TRES request. |
+| `walltime` | Yes | Slurm duration in `[days-]HH:MM:SS` form. Values are rounded up to a whole minute for the REST request. |
+
+## `scaleSets[].execution`
+
+| Field | Required | Constraints and purpose |
+| --- | --- | --- |
+| `mode` | Yes | Must be `pyxis` for the initial release. Native execution is not implemented. |
+| `image` | Yes | Pyxis image reference or absolute shared SquashFS path. An absolute path is recommended and checked by `doctor`. |
+| `scratchRoot` | Yes | Absolute writable root used for disposable lease directories. |
+| `mountHome` | No | Defaults to `false`. Keep disabled unless workflows explicitly require and are trusted with the service account's home. |
+| `extraMounts` | No | Additional bind mounts. Use the smallest possible read-only set. |
+
+Each extra mount has these fields:
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `source` | Yes | Absolute host path without comma or colon characters. |
+| `destination` | Yes | Absolute container path without comma or colon characters. |
+| `readOnly` | No | Adds a read-only Pyxis mount when `true`. |
+
+## Duration examples
+
+Configuration durations such as `reconcileInterval`, `requestTimeout`, `maxQueueWait`, and `startupTimeout` use Go duration syntax:
+
+```yaml
+reconcileInterval: "15s"
+requestTimeout: "30s"
+maxQueueWait: "2h"
+startupTimeout: "10m"
+```
+
+Slurm `walltime` uses Slurm-style clock syntax instead:
+
+```yaml
+walltime: "01:00:00"
+walltime: "2-00:00:00"
+```

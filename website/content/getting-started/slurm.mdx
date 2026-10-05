@@ -1,0 +1,53 @@
+---
+title: Configure Slurm access
+description: Prepare slurmrestd, a service user, and a renewable JWT
+menu-position: 4
+keywords: ['Slurm', 'slurmrestd', 'JWT', 'credentials']
+---
+
+Actions Runner Slurm uses `slurmrestd` to submit, inspect, and cancel runner allocations. It authenticates each request with `X-SLURM-USER-NAME` and `X-SLURM-USER-TOKEN`.
+
+## Create a dedicated Slurm identity
+
+Use a dedicated site identity such as `github-ci`. Grant it only the partitions, accounts, QOS values, GRES resources, and filesystems needed by the runner classes you plan to expose.
+
+The identity needs enough Slurm authority to:
+
+- submit one-node, one-task jobs;
+- list jobs and observe their state and correlation comment;
+- cancel its own pending jobs during scale-down;
+- launch `srun` with the Pyxis options used by the service.
+
+## Obtain a renewable JWT
+
+How JWTs are issued and renewed is site-specific. Ask the Slurm administrator for a token representing the configured `slurm.user`. Arrange for your credential manager or renewal process to replace the token file before it expires.
+
+Write either the bare token or a single `SLURM_JWT=...` line to the configured path.
+
+```bash
+sudo install -o github-ci -g github-ci -m 0600 \
+  ./slurm-jwt \
+  /run/secrets/slurm-jwt
+```
+
+The service checks that the file is not group- or world-accessible and reads it again before every REST request. You can therefore rotate the JWT atomically without restarting the service.
+
+## Configure CA trust
+
+If `slurmrestd` uses a private certificate authority, install its CA bundle on the service host:
+
+```bash
+sudo install -o root -g github-ci -m 0640 \
+  ./cluster-ca.pem \
+  /etc/slurm-gha/cluster-ca.pem
+```
+
+Set `slurm.caFile` to that path. Disabling certificate verification is not supported.
+
+## Check the REST contract
+
+The initial release has been verified with Slurm 24.11.5 and data parser `v0.0.42`. Your `slurmrestd` endpoint must expose the corresponding ping, job submission, batched job listing, and cancellation routes.
+
+The [compatibility reference](/reference/compatibility/) records the exact tested environment.
+
+Next, [build the runner image](/getting-started/runner-image/).

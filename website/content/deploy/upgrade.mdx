@@ -1,0 +1,39 @@
+---
+title: Upgrade the service
+description: Replace the binary and runner image while preserving state
+menu-position: 2
+keywords: ['upgrade', 'release', 'rollback']
+---
+
+Upgrade the service and the runner image as separate changes. A service release does not automatically replace the SquashFS image referenced by a runner class.
+
+## Before upgrading
+
+1. Read the release notes and compatibility record.
+2. Back up `/etc/slurm-gha` and the secret files through your normal secret-management system.
+3. Back up the BoltDB state file while the service is stopped.
+4. Keep the previous binary and immutable runner image available for rollback.
+
+## Replace the binary
+
+Stop the service, install the new binary, validate the existing configuration, and restart:
+
+```bash
+sudo systemctl stop slurm-gha.service
+sudo install -o root -g root -m 0755 ./slurm-gha /usr/local/bin/slurm-gha
+sudo -u github-ci /usr/local/bin/slurm-gha validate-config \
+  --config /etc/slurm-gha/config.yaml
+sudo systemctl start slurm-gha.service
+```
+
+Stopping the service does not cancel running allocations. After restart, the service reconciles allocations it owns from the durable state database.
+
+## Replace a runner image
+
+Build and import the new image under a versioned, immutable path. Update `scaleSets[].execution.image`, validate, and restart the service.
+
+Do not replace a SquashFS file in place while allocations are using it. Retain the previous image until every allocation created from the old configuration has finished.
+
+## Roll back
+
+If startup fails, restore the previous binary and configuration together. Do not open a state database with an older release when the release notes say its schema is incompatible.

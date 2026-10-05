@@ -1,0 +1,116 @@
+---
+title: Configure the service
+description: Configure TLS, GitHub, Slurm, and the first runner scale set
+menu-position: 6
+keywords: ['config.yaml', 'TLS', 'scale set', 'runner class']
+---
+
+Create `/etc/slurm-gha/config.yaml` from the example included in the release archive. The configuration parser is strict: unknown fields and invalid values prevent startup.
+
+## Configure the callback endpoint
+
+Every runner allocation claims its just-in-time GitHub registration over HTTPS. Choose a DNS name and port reachable from the compute nodes.
+
+Install a server certificate and key:
+
+```bash
+sudo install -o root -g github-ci -m 0640 ./tls.crt /etc/slurm-gha/tls.crt
+sudo install -o root -g github-ci -m 0640 ./tls.key /etc/slurm-gha/tls.key
+```
+
+If the certificate uses a private CA, install the CA certificate as well. The service mounts `service.tls.caFile` read-only into each Pyxis allocation so the bootstrap can verify the callback.
+
+## Generate the JIT encryption key
+
+The service uses a separate 32-byte key to encrypt retryable just-in-time runner configuration stored in its state database.
+
+```bash
+sudo -u github-ci /usr/local/bin/slurm-gha generate-key \
+  --output /run/secrets/slurm-gha-jit-key
+```
+
+The command creates a mode-`0600` file and refuses to overwrite an existing key. Back it up through your site's secret-management process. Replacing it while retryable claims exist makes those cached responses unreadable.
+
+## Write the configuration
+
+The following example creates one CPU runner class named `slurm-cpu-small`:
+
+```yaml
+apiVersion: slurm-gha/v1alpha1
+
+service:
+  listenAddress: "0.0.0.0:8443"
+  publicUrl: "https://slurm-gha.example.org:8443"
+  statePath: "/var/lib/slurm-gha/state.db"
+  jitEncryptionKeyFile: "/run/secrets/slurm-gha-jit-key"
+  logRoot: "/shared/slurm-gha/logs"
+  reconcileInterval: "15s"
+  tls:
+    certificateFile: "/etc/slurm-gha/tls.crt"
+    keyFile: "/etc/slurm-gha/tls.key"
+    caFile: "/etc/slurm-gha/callback-ca.crt"
+
+github:
+  configUrl: "https://github.com/example-org"
+  app:
+    clientId: "Iv1.example"
+    installationId: 654321
+    privateKeyFile: "/run/secrets/github-app.pem"
+
+slurm:
+  baseUrl: "https://slurm-api.example.org"
+  apiVersion: "v0.0.42"
+  user: "github-ci"
+  tokenFile: "/run/secrets/slurm-jwt"
+  caFile: "/etc/slurm-gha/cluster-ca.pem"
+  requestTimeout: "30s"
+
+scaleSets:
+  - name: "slurm-cpu-small"
+    runnerGroup: "slurm-ci"
+    maxRunners: 10
+    maxPending: 10
+    maxQueueWait: "2h"
+    startupTimeout: "10m"
+    slurm:
+      partition: "cpu"
+      account: "ci"
+      qos: "normal"
+      nodes: 1
+      tasks: 1
+      cpusPerTask: 4
+      memory: "16G"
+      walltime: "01:00:00"
+    execution:
+      mode: "pyxis"
+      image: "/cluster/images/actions-runner-2.337.0.sqsh"
+      scratchRoot: "/shared/slurm-gha/scratch"
+      mountHome: false
+      extraMounts: []
+```
+
+Remove an optional CA or QOS field when your site does not use it. Do not add blank paths for required fields.
+
+The scale-set `name` becomes the workflow's `runs-on` value. Each scale set maps one fixed GitHub label to one fixed Slurm resource template. Unknown workflow labels do not create resources dynamically.
+
+## Validate the configuration
+
+Run both checks as the service identity:
+
+```bash
+sudo -u github-ci /usr/local/bin/slurm-gha validate-config \
+  --config /etc/slurm-gha/config.yaml
+
+sudo -u github-ci /usr/local/bin/slurm-gha doctor \
+  --config /etc/slurm-gha/config.yaml
+```
+
+A successful validation prints:
+
+```text
+configuration is valid
+```
+
+`doctor` checks the configuration, connects to `slurmrestd`, and confirms that each absolute Pyxis image path exists. It does not create the GitHub scale set or start a listener.
+
+Next, [start the service and run a workflow](/getting-started/run/).

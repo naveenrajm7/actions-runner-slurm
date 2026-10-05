@@ -1,0 +1,41 @@
+---
+title: Compatibility
+description: Review the environment verified by the first end-to-end deployment
+menu-position: 3
+keywords: ['compatibility', 'Slurm 24.11.5', 'Pyxis 0.21.0', 'Enroot 4.0.1']
+---
+
+The first cluster contract was observed and tested on October 4, 2026.
+
+| Component | Verified contract |
+| --- | --- |
+| Slurm | 24.11.5 |
+| `slurmrestd` data parser | `data_parser/v0.0.42` |
+| REST authentication | `X-SLURM-USER-NAME` and renewable JWT in `X-SLURM-USER-TOKEN` |
+| Pyxis | 0.21.0 |
+| Enroot | 4.0.1 |
+| GitHub scale-set client | `github.com/actions/scaleset` v0.4.0 |
+| Actions runner | v2.337.0, Linux x64 |
+| Runner base | Ubuntu 24.04 pinned by image digest |
+| Go toolchain used by the project | 1.27.1 |
+
+## Verified behavior
+
+The development cluster verified:
+
+- REST submission, batched job listing, state observation, and cancellation.
+- A one-node, one-task allocation launched from a shared SquashFS image.
+- Pyxis startup with the home and image entrypoint disabled.
+- Compute-node DNS resolution and TCP/443 access to GitHub.
+- A private-CA HTTPS callback from a compute allocation to the service.
+- GitHub App installation authentication and organization runner-group access.
+- One complete private-repository workflow using `runs-on: slurm-cpu-small`.
+- JIT claim, ephemeral runner registration, repository checkout, job completion, runner deregistration, and Slurm cleanup.
+
+## REST endpoint behavior
+
+The verified deployment's single-job `v0.0.42` endpoint returned `Invalid JobID` for a live job that appeared in the batched `/jobs/` response. The adapter deliberately uses the working batched job endpoint for reconciliation and ownership verification.
+
+This is measured behavior from one deployment, not a claim that every Slurm version behaves the same way. Validate another site with `doctor`, `slurm-smoke`, and a disposable end-to-end workflow before production use.
+
+For raw evidence and image checksums, see the repository's [compatibility record](https://github.com/naveenrajm7/actions-runner-slurm/blob/main/docs/compatibility.md).

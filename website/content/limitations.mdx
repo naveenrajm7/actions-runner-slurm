@@ -1,0 +1,40 @@
+---
+title: Known limitations
+description: Understand the boundaries of the initial release
+menu-position: 6
+keywords: ['limitations', 'initial release', 'Pyxis']
+---
+
+The initial release intentionally supports a narrow, verifiable deployment model.
+
+## Execution
+
+- Pyxis and Enroot container execution is required.
+- Native host execution is not implemented, even though the evolving configuration schema reserves a `native` value.
+- Each runner allocation must request exactly one node and one task.
+- The supplied runner image is Linux x86-64.
+- Docker container actions, job containers, service containers, and Docker-in-Docker are not supported.
+- The image and mount paths are controlled by the cluster administrator, not by workflow labels.
+
+## Security and tenancy
+
+- The supported trust boundary is private, trusted repositories.
+- Pyxis and Enroot are not a hostile multi-tenant sandbox.
+- Workflow code runs as the configured Slurm identity and inherits its reachable services and explicit mounts.
+- Claim credentials are passed through the Slurm job environment and may be visible to sufficiently privileged Slurm users or administrators.
+
+## Availability and operations
+
+- One process owns one BoltDB state file; active-active high availability is not supported.
+- Metrics and a drain-administration API are not implemented.
+- The service does not create GitHub runner groups or manage their repository policies.
+- Fast-finished allocation accounting fallback and the full failure/concurrency campaign remain future work.
+- The `v0.0.42` batched job endpoint is the verified reconciliation contract.
+
+## Resource selection
+
+- Every scale-set name maps to one fixed Slurm resource template.
+- Unknown labels do not create runner classes.
+- Dynamic per-workflow CPU, memory, walltime, partition, account, QOS, and GRES requests are not supported.
+
+These boundaries should be treated as deployment requirements, not merely missing documentation. Future releases may expand them without changing the secure defaults of existing installations.

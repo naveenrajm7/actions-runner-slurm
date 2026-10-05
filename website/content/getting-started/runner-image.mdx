@@ -1,0 +1,64 @@
+---
+title: Build the runner image
+description: Build and import the Pyxis and Enroot runner image
+menu-position: 5
+keywords: ['runner image', 'Pyxis', 'Enroot', 'SquashFS']
+---
+
+Every allocation starts an immutable image containing the official GitHub Actions runner and the Actions Runner Slurm bootstrap script. The provided image definition is currently Linux x86-64.
+
+<Note variant="warning">
+  Pyxis execution is the only mode supported by the initial release. Setting `execution.mode` to `native` passes schema validation but is rejected when the service starts.
+</Note>
+
+## Build the OCI image
+
+From a checkout of the matching Actions Runner Slurm release, build the image supplied by the repository:
+
+```bash
+docker build \
+  --tag actions-runner-slurm:2.337.0 \
+  images/runner
+```
+
+The Dockerfile pins both the Ubuntu base image digest and the official Actions runner checksum. Review those pins when upgrading the runner.
+
+## Import the image with Enroot
+
+Import the local Docker image into a SquashFS file. Run this where Enroot can communicate with the Docker daemon and write the shared image directory.
+
+```bash
+enroot import \
+  --output /cluster/images/actions-runner-2.337.0.sqsh \
+  dockerd://actions-runner-slurm:2.337.0
+```
+
+Your site may instead publish the OCI image to a registry and import it using the standard Enroot registry workflow.
+
+The final SquashFS path must:
+
+- be absolute;
+- exist on the service host so `slurm-gha doctor` can inspect it;
+- be readable at the same path on every eligible compute node;
+- remain unchanged while jobs refer to it.
+
+## Test Pyxis and GitHub egress
+
+After writing a preliminary configuration or obtaining the corresponding values, run the built-in smoke test:
+
+```bash
+sudo -u github-ci /usr/local/bin/slurm-gha slurm-smoke \
+  --base-url https://slurm-api.example.org \
+  --api-version v0.0.42 \
+  --user github-ci \
+  --token-file /run/secrets/slurm-jwt \
+  --partition cpu \
+  --account ci \
+  --image /cluster/images/actions-runner-2.337.0.sqsh \
+  --work-root /shared/slurm-gha-smoke \
+  --require-runner
+```
+
+This submits a small allocation and verifies Pyxis startup, DNS, outbound TCP/443 to GitHub, and the runner/bootstrap files in the image.
+
+Next, [configure the service](/getting-started/configure/).

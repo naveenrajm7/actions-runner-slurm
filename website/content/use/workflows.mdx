@@ -1,0 +1,73 @@
+---
+title: Use runners in workflows
+description: Target a Slurm runner class and stay within the supported execution model
+menu-position: 1
+keywords: ['workflow', 'runs-on', 'labels', 'container actions']
+---
+
+Each configured scale set represents one runner class. The scale-set name is both the GitHub scale-set name and the workflow label.
+
+```yaml
+jobs:
+  test:
+    runs-on: slurm-cpu-small
+    steps:
+      - uses: actions/checkout@v4
+      - run: make test
+```
+
+The service maps `slurm-cpu-small` to the fixed Slurm resource request in `config.yaml`. Workflow authors cannot add arbitrary labels to request different CPUs, memory, partitions, or GPUs. A cluster administrator must define another scale set for another resource shape.
+
+## Use multiple runner classes
+
+An administrator can expose several controlled shapes:
+
+```yaml
+scaleSets:
+  - name: slurm-cpu-small
+    # CPU resource and execution settings
+  - name: slurm-gpu-mi300x
+    # GPU resource and execution settings
+```
+
+A workflow can select them with a matrix:
+
+```yaml
+jobs:
+  test:
+    strategy:
+      matrix:
+        runner: [slurm-cpu-small, slurm-gpu-mi300x]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./ci/test.sh
+```
+
+Repository access is controlled by the GitHub runner group, not by the YAML label alone.
+
+## Supported actions
+
+The initial Pyxis image can run shell commands, JavaScript actions, and composite actions when their required tools are present in the image.
+
+These GitHub Actions features are not supported in the initial release:
+
+- Docker container actions.
+- Job containers declared with `jobs.<job_id>.container`.
+- Service containers declared with `jobs.<job_id>.services`.
+- Workflows that require a Docker daemon inside the runner.
+
+Build required compilers, libraries, command-line tools, and CA certificates into a versioned runner image or expose carefully reviewed read-only mounts.
+
+## Slurm context
+
+Workflow steps run inside the Slurm allocation. Standard Slurm variables such as `SLURM_JOB_ID` are available:
+
+```yaml
+- name: Record allocation metadata
+  run: |
+    echo "host=$(hostname)"
+    echo "job=${SLURM_JOB_ID}"
+```
+
+GitHub reports the workflow conclusion, while Slurm independently records the allocation state and exit code. A Slurm `COMPLETED` state does not by itself prove that every Actions step passed.

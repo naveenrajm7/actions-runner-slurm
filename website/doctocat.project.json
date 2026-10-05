@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "framework": "doctocat-nextjs",
+  "projectRoot": ".",
+  "outputDirectory": "out",
+  "basePath": "/actions-runner-slurm",
+  "staticExport": true
+}

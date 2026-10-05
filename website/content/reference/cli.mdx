@@ -1,0 +1,97 @@
+---
+title: Command-line reference
+description: Reference the slurm-gha service, validation, status, key, and smoke commands
+menu-position: 2
+keywords: ['CLI', 'doctor', 'status', 'slurm-smoke']
+---
+
+The `slurm-gha` binary provides operational commands for the service and its prerequisites.
+
+## `serve`
+
+Start the HTTPS callback, reconcile owned allocations, ensure runner scale sets, and run GitHub listeners.
+
+```bash
+slurm-gha serve --config /etc/slurm-gha/config.yaml
+```
+
+`--config` is required.
+
+## `validate-config`
+
+Parse the strict YAML schema and validate values without connecting to external services.
+
+```bash
+slurm-gha validate-config --config /etc/slurm-gha/config.yaml
+```
+
+Success prints `configuration is valid`.
+
+## `doctor`
+
+Validate configuration, ping `slurmrestd`, and check absolute Pyxis image paths.
+
+```bash
+slurm-gha doctor --config /etc/slurm-gha/config.yaml
+```
+
+Success prints a JSON object containing `configuration`, `slurmrestd`, and one entry per runner class.
+
+## `status`
+
+Read and pretty-print durable lease records from the state database.
+
+```bash
+slurm-gha status --config /etc/slurm-gha/config.yaml
+```
+
+The running service holds an exclusive BoltDB lock. Depending on filesystem and process state, stop the service before using `status` if the read-only open cannot acquire the database.
+
+## `generate-key`
+
+Create the 32-byte key that encrypts retryable JIT responses.
+
+```bash
+slurm-gha generate-key --output /run/secrets/slurm-gha-jit-key
+```
+
+The output path must be absolute. The command creates a mode-`0600` file and refuses to overwrite an existing path.
+
+## `slurm-smoke`
+
+Submit a small Pyxis allocation and verify compute-node DNS and GitHub TCP/443 egress.
+
+```bash
+slurm-gha slurm-smoke \
+  --base-url https://slurm-api.example.org \
+  --api-version v0.0.42 \
+  --user github-ci \
+  --token-file /run/secrets/slurm-jwt \
+  --partition cpu \
+  --account ci \
+  --qos normal \
+  --image /cluster/images/actions-runner-2.337.0.sqsh \
+  --work-root /shared/slurm-gha-smoke \
+  --timeout 5m \
+  --require-runner
+```
+
+Required flags are `--base-url`, `--user`, `--token-file`, `--account`, `--image`, and the absolute `--work-root`.
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--api-version` | `v0.0.42` | Slurm REST data parser. |
+| `--partition` | `defq` | Test partition. |
+| `--qos` | Empty | Optional test QOS. |
+| `--timeout` | `5m` | Maximum wait for the allocation. |
+| `--require-runner` | `false` | Also verify the official runner and bootstrap files in the image. |
+
+The command prints the submitted job ID and the directory containing `slurm.out` and `slurm.err`.
+
+## `version`
+
+Print the release version and embedded source commit.
+
+```bash
+slurm-gha version
+```

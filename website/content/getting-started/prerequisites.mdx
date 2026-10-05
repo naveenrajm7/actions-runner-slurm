@@ -1,0 +1,64 @@
+---
+title: Prerequisites
+description: Check the GitHub, Slurm, network, storage, and container requirements
+menu-position: 1
+keywords: ['requirements', 'Pyxis', 'Enroot', 'slurmrestd']
+---
+
+Before installing Actions Runner Slurm, make sure you control the GitHub organization and the Slurm resources that the service will use.
+
+<Note variant="warning">
+  Use this release only with trusted private repositories. Workflow code runs as the configured Slurm Unix identity and can access that identity's mounted files and reachable cluster services.
+</Note>
+
+## GitHub requirements
+
+You need:
+
+- A GitHub organization where you can create and install a GitHub App.
+- Permission to manage organization runner groups.
+- A dedicated runner group that already exists. The service creates runner scale sets inside the group, but it does not create the group.
+- At least one private repository permitted to use that runner group.
+
+The initial release uses GitHub App authentication. Personal access tokens and enterprise-level runner registration are not supported.
+
+## Slurm requirements
+
+Your site must provide:
+
+- A Slurm cluster with `slurmrestd` enabled.
+- A supported REST data parser. The first verified contract is `v0.0.42` with Slurm 24.11.5.
+- A dedicated Slurm user and a renewable JWT that can submit, inspect, and cancel that user's jobs.
+- Pyxis and Enroot installed and configured on the compute nodes.
+- A partition, account, and optional QOS available to the service user.
+- Exactly one node and one task per runner allocation. Multi-node and multi-task runners are not supported in `v1alpha1`.
+
+## Network requirements
+
+The service host must reach:
+
+- GitHub over HTTPS.
+- `slurmrestd` over HTTP or HTTPS. HTTPS with a trusted or explicitly configured CA is recommended.
+
+Every compute node that can run a runner allocation must reach:
+
+- `github.com` and the other endpoints required by GitHub Actions over TCP port 443.
+- `service.publicUrl`, the HTTPS callback endpoint exposed by Actions Runner Slurm.
+
+Do not disable TLS verification. If the callback or `slurmrestd` uses a private CA, provide the CA files in the service configuration.
+
+## Storage requirements
+
+Choose paths that are visible to both the service host and allocated compute nodes:
+
+- A read-only SquashFS runner image.
+- A scratch root where each disposable runner gets a private working directory.
+- A log root where Slurm output and runner diagnostics are retained.
+
+The service also needs a local state directory for its BoltDB database. Only one service process can open that database at a time.
+
+## Installation host
+
+The `slurm-gha` binary can run on any Linux host that satisfies the requirements above. It does not have to run on a Slurm controller. A login or service node is often convenient because it already has access to site filesystems, credentials, and `slurmrestd`.
+
+Next, [install the binary](/getting-started/install/).
