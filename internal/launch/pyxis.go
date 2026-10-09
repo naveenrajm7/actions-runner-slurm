@@ -3,7 +3,6 @@ package launch
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -11,18 +10,16 @@ import (
 	"github.com/naveenrajm7/actions-runner-slurm/internal/store"
 )
 
-type RenderedJob struct {
-	Script           string
-	WorkingDirectory string
-	StandardOutput   string
-	StandardError    string
-	Environment      map[string]string
-	ScratchDirectory string
-	LogDirectory     string
+type pyxisBackend struct{}
+
+func (pyxisBackend) Mode() config.ExecutionMode { return config.ExecutionModePyxis }
+func (pyxisBackend) Ready() error               { return nil }
+func (pyxisBackend) Render(service config.ServiceConfig, class config.ScaleSetConfig, lease store.Lease, claimToken string) (RenderedJob, error) {
+	return RenderPyxis(service, class, lease, claimToken)
 }
 
 func RenderPyxis(service config.ServiceConfig, class config.ScaleSetConfig, lease store.Lease, claimToken string) (RenderedJob, error) {
-	if class.Execution.Mode != "pyxis" {
+	if class.Execution.Mode != config.ExecutionModePyxis {
 		return RenderedJob{}, errors.New("Pyxis renderer requires execution.mode=pyxis")
 	}
 	if lease.ID == "" || claimToken == "" {
@@ -51,7 +48,9 @@ func RenderPyxis(service config.ServiceConfig, class config.ScaleSetConfig, leas
 		homeFlag = "--container-mount-home"
 	}
 	args := []string{
-		"srun", "--nodes=1", "--ntasks=1", "--kill-on-bad-exit=1", "--export=ALL",
+		"srun", "--nodes=1", "--ntasks=1",
+		fmt.Sprintf("--cpus-per-task=%d", class.Slurm.CPUsPerTask),
+		"--kill-on-bad-exit=1", "--export=ALL",
 		"--container-image=" + class.Execution.Image,
 		"--container-mounts=" + strings.Join(mounts, ","),
 		"--container-workdir=/runner", homeFlag, "--no-container-entrypoint",
@@ -100,23 +99,4 @@ exit "$status"
 		ScratchDirectory: leaseRoot, LogDirectory: logDir,
 		Environment: environment,
 	}, nil
-}
-
-func (r RenderedJob) PrepareDirectories() error {
-	for _, dir := range []string{r.ScratchDirectory, r.LogDirectory} {
-		if !filepath.IsAbs(dir) {
-			return fmt.Errorf("refusing to create non-absolute directory %q", dir)
-		}
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return fmt.Errorf("create job directory %s: %w", dir, err)
-		}
-		if err := os.Chmod(dir, 0o700); err != nil {
-			return fmt.Errorf("secure job directory %s: %w", dir, err)
-		}
-	}
-	return nil
-}
-
-func shellQuote(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'"
 }

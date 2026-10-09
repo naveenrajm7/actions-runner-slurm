@@ -15,7 +15,7 @@ Actions Runner Slurm connects GitHub's runner scale-set control plane to a Slurm
 | `slurm-gha` | Listens for scale-set messages, creates durable leases, submits and reconciles Slurm jobs, and issues JIT runner configuration. |
 | `slurmrestd` | Authenticates the service identity and exposes job submission, listing, and cancellation. |
 | Slurm | Queues allocations, enforces resources, schedules nodes, and records accounting state. |
-| Pyxis and Enroot | Start the immutable runner image and mount disposable work and diagnostic directories. |
+| Execution backend | Starts either a Pyxis/Enroot container or a VMoCS virtual machine for the selected runner class. |
 | Official Actions runner | Executes one GitHub Actions job and then removes its ephemeral registration. |
 
 ## Provisioning flow
@@ -23,12 +23,12 @@ Actions Runner Slurm connects GitHub's runner scale-set control plane to a Slurm
 1. GitHub sends a desired runner count to the scale-set listener.
 2. The service writes a lease to BoltDB before submitting anything to Slurm.
 3. It submits a one-node, one-task Slurm job with a correlation comment in the form `slurm-gha/<lease-id>`.
-4. Slurm schedules the allocation and Pyxis starts the configured SquashFS image.
+4. Slurm schedules the allocation and the selected backend starts a Pyxis container or VMoCS VM.
 5. The bootstrap posts its lease credential and Slurm job ID to the service's HTTPS claim endpoint.
 6. The service verifies the token, allocation ID, correlation comment, phase, and restart count against `slurmrestd`.
 7. The service asks GitHub for a just-in-time runner configuration and returns it to the allocation.
 8. The official runner executes one workflow job.
-9. GitHub and Slurm lifecycle updates are persisted independently, and the disposable work directory is removed.
+9. GitHub and Slurm lifecycle updates are persisted independently, and disposable work is removed with the allocation environment.
 
 ## Reconciliation
 

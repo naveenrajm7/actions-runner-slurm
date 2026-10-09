@@ -1,6 +1,6 @@
 # actions-runner-slurm
 
-`slurm-gha` provisions ephemeral GitHub Actions runner scale-set workers as Slurm allocations. GitHub matches jobs and the official `actions/runner` executes them; Slurm provides scheduling, resource enforcement, accounting, and Pyxis/Enroot container startup.
+`slurm-gha` provisions ephemeral GitHub Actions runner scale-set workers as Slurm allocations. GitHub matches jobs and the official `actions/runner` executes them; Slurm provides scheduling, resource enforcement, and accounting. A runner class can launch in a Pyxis/Enroot container or a VMoCS virtual machine. Native host execution is reserved but not implemented.
 
 The user documentation is published at [naveenrajm7.github.io/actions-runner-slurm](https://naveenrajm7.github.io/actions-runner-slurm/). Start with the [prerequisites](https://naveenrajm7.github.io/actions-runner-slurm/getting-started/prerequisites/) and the guided installation.
 
@@ -11,11 +11,11 @@ The implementation currently includes:
 - a typed slurmrestd v0.0.42 adapter with rotating token-file reads and custom CA support;
 - durable BoltDB leases, lifecycle transitions, ambiguous-submission adoption, and a single-process lock;
 - one-use, hashed bootstrap credentials and AES-GCM-encrypted retryable JIT responses;
-- a Pyxis launcher that disables home/entrypoint behavior and creates isolated runner directories;
+- explicit execution backends for Pyxis containers and VMoCS VMs, with native mode visibly reserved;
 - HTTPS claim, health, and readiness endpoints;
 - `serve`, `validate-config`, `doctor`, `status`, `generate-key`, and `slurm-smoke` commands.
 
-The first cluster contract was verified on October 4, 2026: a REST-submitted Slurm 24.11.5 allocation launched a squashfs image with Pyxis 0.21.0 / Enroot 4.0.1, reached `github.com:443`, exited zero, and released the allocation. See [the compatibility record](docs/compatibility.md).
+The first cluster contract was verified on October 4, 2026: a REST-submitted Slurm 24.11.5 allocation launched a squashfs image with Pyxis 0.21.0 / Enroot 4.0.1, reached `github.com:443`, exited zero, and released the allocation. On October 8, VMoCS 0.1.3 launched the prepared Ubuntu VM, forwarded the complete callback environment, claimed a real GitHub JIT configuration over verified HTTPS, and executed a private-repository workflow successfully with runner v2.337.0. See [the compatibility record](docs/compatibility.md).
 
 ## Build and test
 
@@ -60,15 +60,25 @@ bin/slurm-gha serve --config /etc/slurm-gha/config.yaml
 
 The service reconciles existing owned allocations before opening GitHub listener sessions. Ordinary shutdown stops new work and preserves scale sets, state, and running allocations.
 
-## Runner image
+## Execution modes and runner images
 
-The image definition in [images/runner/Dockerfile](images/runner/Dockerfile) packages official Actions runner v2.337.0 and [the bootstrap](images/runner/bootstrap.sh). The bootstrap copies that read-only distribution into a fresh writable directory, claims JIT over HTTPS, supplies it through `ACTIONS_RUNNER_INPUT_JITCONFIG`, then removes the claim material before starting the runner.
+Each scale set selects exactly one execution mode:
 
-An image must be built and imported to a site-readable squashfs path before a real class is enabled. Docker-dependent Actions features are not supported by this first execution mode.
+| Mode | Environment | Status |
+| --- | --- | --- |
+| `pyxis` | Pyxis/Enroot container from `execution.image` | Implemented and end-to-end verified |
+| `vmocs` | VMoCS VM template from `execution.image` | Implemented and end-to-end workflow verified |
+| `native` | Compute-node host | Reserved, not implemented |
+
+See [execution modes](docs/execution-modes.md) for configuration and launch behavior, and [VMoCS guest preparation](images/runner-vm/README.md) for an actionable image checklist.
+
+The image definition in [images/runner/Dockerfile](images/runner/Dockerfile) packages official Actions runner v2.337.0 and [the bootstrap](images/runner/bootstrap.sh) for Pyxis. A VMoCS guest must provide the same files at `/opt/actions-runner` and `/opt/slurm-gha/bootstrap.sh`, plus writable `/runner` and `/runner-logs` directories. The bootstrap copies the distribution into a fresh writable directory, claims JIT over HTTPS, supplies it through `ACTIONS_RUNNER_INPUT_JITCONFIG`, then removes the claim material before starting the runner.
+
+A Pyxis image must be imported to a site-readable squashfs path. A VMoCS template must be available on eligible compute nodes and use VMoCS 0.1.3 or newer for repeatable selected-environment forwarding. Docker-dependent Actions features are not supplied by either mode.
 
 ## Configuration
 
-Start with [examples/config.yaml](examples/config.yaml). Each class has a fixed GitHub scale-set name and Slurm resource template. Unknown workflow labels do not create classes.
+Start with the [Pyxis example](examples/config.yaml) or [VMoCS example](examples/config-vmocs.yaml). Each class has a fixed GitHub scale-set name and Slurm resource template. Unknown workflow labels do not create classes.
 
 ```yaml
 jobs:
@@ -83,4 +93,4 @@ Security and lifecycle details are in [docs/design.md](docs/design.md). The init
 
 ## Current boundary
 
-The initial release supports Pyxis/Enroot container execution only. Native execution, metrics, drain administration, accounting fallback for fast-finished jobs, and the full failure/concurrency campaign remain subsequent milestones. The Slurm adapter deliberately uses the working batched `/jobs/` endpoint because this deployment's v0.0.42 single-job endpoint returned `Invalid JobID` for a live job.
+Pyxis and VMoCS are both end-to-end workflow verified. Native execution, metrics, drain administration, accounting fallback for fast-finished jobs, and the full failure/concurrency campaign remain subsequent milestones. Federated job IDs exceed Slurm's local `MAX_JOB_ID`, so the adapter uses plural v0.0.42 endpoints for observation and cancellation instead of the singular `/job/{id}` handler that rejects those IDs.

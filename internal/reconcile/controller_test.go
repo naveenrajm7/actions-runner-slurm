@@ -2,11 +2,14 @@ package reconcile
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/naveenrajm7/actions-runner-slurm/internal/config"
+	"github.com/naveenrajm7/actions-runner-slurm/internal/launch"
 	"github.com/naveenrajm7/actions-runner-slurm/internal/slurm"
 	"github.com/naveenrajm7/actions-runner-slurm/internal/store"
 )
@@ -35,7 +38,7 @@ func TestDesiredCapacityCountsPendingLeases(t *testing.T) {
 	class := config.ScaleSetConfig{
 		Name: "cpu", MaxRunners: 3, MaxPending: 2, MaxQueueWait: time.Hour, StartupTimeout: time.Minute,
 		Slurm:     config.ResourceConfig{Partition: "p", Account: "a", Nodes: 1, Tasks: 1, CPUsPerTask: 2, MemoryMiB: 1024, WallMinutes: 10},
-		Execution: config.ExecutionConfig{Mode: "pyxis", Image: "/image.sqsh", ScratchRoot: filepath.Join(root, "scratch")},
+		Execution: config.ExecutionConfig{Mode: config.ExecutionModePyxis, Image: "/image.sqsh", ScratchRoot: filepath.Join(root, "scratch")},
 	}
 	controller, err := New(state, client, config.ServiceConfig{PublicURL: "https://service.example", LogRoot: filepath.Join(root, "logs")}, []config.ScaleSetConfig{class}, nil)
 	if err != nil {
@@ -54,5 +57,48 @@ func TestDesiredCapacityCountsPendingLeases(t *testing.T) {
 	}
 	if got != 2 || len(client.submissions) != 2 {
 		t.Fatalf("pending leases were not counted: live=%d submissions=%d", got, len(client.submissions))
+	}
+}
+
+func TestVMoCSClassUsesVMBackend(t *testing.T) {
+	root := t.TempDir()
+	state, err := store.Open(filepath.Join(root, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer state.Close()
+	client := &fakeSlurm{}
+	class := config.ScaleSetConfig{
+		Name: "vm", MaxRunners: 1, MaxPending: 1, MaxQueueWait: time.Hour, StartupTimeout: time.Minute,
+		Slurm:     config.ResourceConfig{Partition: "vm", Account: "vm", Nodes: 1, Tasks: 1, CPUsPerTask: 2, MemoryMiB: 2048, WallMinutes: 10},
+		Execution: config.ExecutionConfig{Mode: config.ExecutionModeVMoCS, Image: "base-ubuntu", ScratchRoot: filepath.Join(root, "scratch")},
+	}
+	controller, err := New(state, client, config.ServiceConfig{PublicURL: "https://service.example", LogRoot: filepath.Join(root, "logs")}, []config.ScaleSetConfig{class}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := controller.SetDesired(context.Background(), "vm", 1); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.submissions) != 1 {
+		t.Fatalf("submissions = %d, want 1", len(client.submissions))
+	}
+	script := client.submissions[0].Script
+	if !strings.Contains(script, "--vm-image=base-ubuntu") || strings.Contains(script, "--container-image") {
+		t.Fatalf("unexpected VMoCS submission script:\n%s", script)
+	}
+}
+
+func TestNativeClassIsClearlyRejected(t *testing.T) {
+	root := t.TempDir()
+	state, err := store.Open(filepath.Join(root, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer state.Close()
+	class := config.ScaleSetConfig{Name: "native", Execution: config.ExecutionConfig{Mode: config.ExecutionModeNative}}
+	_, err = New(state, &fakeSlurm{}, config.ServiceConfig{}, []config.ScaleSetConfig{class}, nil)
+	if !errors.Is(err, launch.ErrNativeNotImplemented) {
+		t.Fatalf("New() error = %v, want ErrNativeNotImplemented", err)
 	}
 }

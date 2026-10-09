@@ -48,7 +48,7 @@ Repository access is controlled by the GitHub runner group, not by the YAML labe
 
 ## Supported actions
 
-The initial Pyxis image can run shell commands, JavaScript actions, and composite actions when their required tools are present in the image.
+A prepared Pyxis image or VMoCS guest can run shell commands, JavaScript actions, and composite actions when their required tools are present in that environment.
 
 These GitHub Actions features are not supported in the initial release:
 
@@ -57,7 +57,7 @@ These GitHub Actions features are not supported in the initial release:
 - Service containers declared with `jobs.<job_id>.services`.
 - Workflows that require a Docker daemon inside the runner.
 
-Build required compilers, libraries, command-line tools, and CA certificates into a versioned runner image or expose carefully reviewed read-only mounts.
+Build required compilers, libraries, command-line tools, and CA certificates into a versioned runner image. Pyxis can additionally expose carefully reviewed read-only mounts; VMoCS storage exposure is controlled by its site-managed template.
 
 ## Slurm context
 

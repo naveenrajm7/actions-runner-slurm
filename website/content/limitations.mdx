@@ -2,26 +2,27 @@
 title: Known limitations
 description: Understand the boundaries of the initial release
 menu-position: 6
-keywords: ['limitations', 'initial release', 'Pyxis']
+keywords: ['limitations', 'Pyxis', 'VMoCS', 'native']
 ---
 
 The initial release intentionally supports a narrow, verifiable deployment model.
 
 ## Execution
 
-- Pyxis and Enroot container execution is required.
+- Pyxis/Enroot container and VMoCS VM execution are implemented. Only Pyxis has completed an end-to-end GitHub workflow validation so far.
 - Native host execution is not implemented, even though the evolving configuration schema reserves a `native` value.
 - Each runner allocation must request exactly one node and one task.
-- The supplied runner image is Linux x86-64.
+- The supplied container image and documented initial VM guest contract use Linux x86-64.
 - Docker container actions, job containers, service containers, and Docker-in-Docker are not supported.
 - The image and mount paths are controlled by the cluster administrator, not by workflow labels.
 
 ## Security and tenancy
 
 - The supported trust boundary is private, trusted repositories.
-- Pyxis and Enroot are not a hostile multi-tenant sandbox.
+- Pyxis/Enroot and VMoCS are not treated as complete hostile multi-tenant sandboxes by this project.
 - Workflow code runs as the configured Slurm identity and inherits its reachable services and explicit mounts.
 - Claim credentials are passed through the Slurm job environment and may be visible to sufficiently privileged Slurm users or administrators.
+- VMoCS forwards only named variables into the guest command, but runner `_diag` files are not yet exported from the disposable VM.
 
 ## Availability and operations
 

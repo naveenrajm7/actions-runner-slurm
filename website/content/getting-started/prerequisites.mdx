@@ -1,8 +1,8 @@
 ---
 title: Prerequisites
-description: Check the GitHub, Slurm, network, storage, and container requirements
+description: Check the GitHub, Slurm, network, storage, container, and VM requirements
 menu-position: 1
-keywords: ['requirements', 'Pyxis', 'Enroot', 'slurmrestd']
+keywords: ['requirements', 'Pyxis', 'Enroot', 'VMoCS', 'slurmrestd']
 ---
 
 Before installing Actions Runner Slurm, make sure you control the GitHub organization and the Slurm resources that the service will use.
@@ -29,7 +29,7 @@ Your site must provide:
 - A Slurm cluster with `slurmrestd` enabled.
 - A supported REST data parser. The first verified contract is `v0.0.42` with Slurm 24.11.5.
 - A dedicated Slurm user and a renewable JWT that can submit, inspect, and cancel that user's jobs.
-- Pyxis and Enroot installed and configured on the compute nodes.
+- At least one implemented execution backend on eligible compute nodes: Pyxis/Enroot for container classes or VMoCS 0.1.2 or newer for VM classes.
 - A partition, account, and optional QOS available to the service user.
 - Exactly one node and one task per runner allocation. Multi-node and multi-task runners are not supported in `v1alpha1`.
 
@@ -51,9 +51,9 @@ Do not disable TLS verification. If the callback or `slurmrestd` uses a private 
 
 Choose paths that are visible to both the service host and allocated compute nodes:
 
-- A read-only SquashFS runner image.
+- For Pyxis, a read-only SquashFS runner image. For VMoCS, a site-visible template whose guest image contains the runner and bootstrap.
 - A scratch root where each disposable runner gets a private working directory.
-- A log root where Slurm output and runner diagnostics are retained.
+- A log root where Slurm output is retained. Pyxis also exports runner diagnostics there; the initial VMoCS backend does not persist guest `_diag` files.
 
 The service also needs a local state directory for its BoltDB database. Only one service process can open that database at a time.
 
