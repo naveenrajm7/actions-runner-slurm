@@ -131,3 +131,59 @@ func TestListJobsV0042Fixture(t *testing.T) {
 		t.Fatalf("exit code = %#v", job.Exit.ReturnCode)
 	}
 }
+
+func TestCancelUsesFederationSafePluralEndpoint(t *testing.T) {
+	tokenPath := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tokenPath, []byte("token"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	client, err := NewRESTClient(RESTConfig{BaseURL: "https://slurm.example", APIVersion: "v0.0.42", User: "ci", TokenFile: tokenPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.http.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.Method != http.MethodDelete {
+			t.Errorf("method = %q, want DELETE", request.Method)
+		}
+		if request.URL.Path != "/slurm/v0.0.42/jobs/" {
+			t.Errorf("path = %q, want plural jobs endpoint", request.URL.Path)
+		}
+		var body cancelBody
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if len(body.Jobs) != 1 || body.Jobs[0] != "67108865" {
+			t.Errorf("jobs = %#v, want federated job ID", body.Jobs)
+		}
+		if body.Signal != "SIGKILL" {
+			t.Errorf("signal = %q, want SIGKILL", body.Signal)
+		}
+		return jsonResponse(http.StatusOK, `{"status":[{"error":{"string":"","code":0,"message":""},"step_id":"67108865","job_id":{"set":true,"number":67108865},"federation":{"sibling":"cluster-b"}}],"errors":[],"warnings":[]}`), nil
+	})
+	if err := client.Cancel(context.Background(), JobID{ID: 67108865}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCancelReportsPerJobSignalFailure(t *testing.T) {
+	tokenPath := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tokenPath, []byte("token"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	client, err := NewRESTClient(RESTConfig{BaseURL: "https://slurm.example", APIVersion: "v0.0.42", User: "ci", TokenFile: tokenPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.http.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, `{"status":[{"error":{"string":"ESLURM_INVALID_JOB_ID","code":2017,"message":"Invalid job id specified"},"step_id":"67108865","job_id":{"set":true,"number":67108865},"federation":{"sibling":"cluster-b"}}],"errors":[],"warnings":[]}`), nil
+	})
+	err = client.Cancel(context.Background(), JobID{ID: 67108865})
+	if err == nil {
+		t.Fatal("Cancel unexpectedly succeeded")
+	}
+	for _, want := range []string{"67108865", "cluster-b", "Invalid job id specified", "2017"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not contain %q", err, want)
+		}
+	}
+}

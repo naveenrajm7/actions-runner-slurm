@@ -18,6 +18,7 @@ import (
 	"github.com/naveenrajm7/actions-runner-slurm/internal/bootstrap"
 	"github.com/naveenrajm7/actions-runner-slurm/internal/config"
 	githubclient "github.com/naveenrajm7/actions-runner-slurm/internal/github"
+	"github.com/naveenrajm7/actions-runner-slurm/internal/launch"
 	"github.com/naveenrajm7/actions-runner-slurm/internal/observe"
 	"github.com/naveenrajm7/actions-runner-slurm/internal/reconcile"
 	"github.com/naveenrajm7/actions-runner-slurm/internal/slurm"
@@ -222,12 +223,19 @@ func doctor(configPath string) error {
 	}
 	checks := map[string]string{"configuration": "ok", "slurmrestd": "ok"}
 	for _, class := range cfg.ScaleSets {
-		if class.Execution.Mode == "pyxis" && filepath.IsAbs(class.Execution.Image) {
+		backend, err := launch.BackendForMode(class.Execution.Mode)
+		if err != nil {
+			return fmt.Errorf("class %s: %w", class.Name, err)
+		}
+		if err := backend.Ready(); err != nil {
+			return fmt.Errorf("class %s: %w", class.Name, err)
+		}
+		if class.Execution.Mode == config.ExecutionModePyxis && filepath.IsAbs(class.Execution.Image) {
 			if _, err := os.Stat(class.Execution.Image); err != nil {
 				return fmt.Errorf("class %s image: %w", class.Name, err)
 			}
 		}
-		checks["class:"+class.Name] = "ok"
+		checks["class:"+class.Name] = "ok (" + string(class.Execution.Mode) + ")"
 	}
 	return json.NewEncoder(os.Stdout).Encode(checks)
 }
@@ -286,18 +294,40 @@ func slurmSmoke(args []string) error {
 	partition := flags.String("partition", "defq", "Slurm partition")
 	account := flags.String("account", "", "Slurm account")
 	qos := flags.String("qos", "", "Slurm QOS")
+	mode := flags.String("mode", string(config.ExecutionModePyxis), "execution mode: pyxis or vmocs")
 	image := flags.String("image", "", "Pyxis image reference or squashfs path")
+	vmImage := flags.String("vm-image", "", "VMoCS template name")
 	workRoot := flags.String("work-root", "", "shared directory for smoke logs")
+	cpus := flags.Int("cpus", 1, "CPUs per task")
+	memoryMiB := flags.Uint64("memory-mib", 512, "memory per node in MiB")
 	timeout := flags.Duration("timeout", 5*time.Minute, "maximum time to wait")
 	requireRunner := flags.Bool("require-runner", false, "also verify the official runner and bootstrap in the image")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	if *baseURL == "" || *user == "" || *tokenFile == "" || *account == "" || *image == "" || *workRoot == "" {
-		return errors.New("slurm-smoke requires --base-url, --user, --token-file, --account, --image, and --work-root")
+	if *baseURL == "" || *user == "" || *tokenFile == "" || *account == "" || *workRoot == "" {
+		return errors.New("slurm-smoke requires --base-url, --user, --token-file, --account, and --work-root")
 	}
 	if !filepath.IsAbs(*workRoot) {
 		return errors.New("slurm-smoke --work-root must be absolute")
+	}
+	if *cpus < 1 || *memoryMiB < 1 {
+		return errors.New("slurm-smoke --cpus and --memory-mib must be positive")
+	}
+	executionMode := config.ExecutionMode(*mode)
+	switch executionMode {
+	case config.ExecutionModePyxis:
+		if *image == "" {
+			return errors.New("slurm-smoke --mode=pyxis requires --image")
+		}
+	case config.ExecutionModeVMoCS:
+		if *vmImage == "" {
+			return errors.New("slurm-smoke --mode=vmocs requires --vm-image")
+		}
+	case config.ExecutionModeNative:
+		return fmt.Errorf("slurm-smoke: %w", launch.ErrNativeNotImplemented)
+	default:
+		return fmt.Errorf("slurm-smoke: unsupported execution mode %q", executionMode)
 	}
 	workDir, err := os.MkdirTemp(*workRoot, "slurm-gha-smoke-")
 	if err != nil {
@@ -314,22 +344,11 @@ func slurmSmoke(args []string) error {
 		return err
 	}
 	correlation := "slurm-gha/smoke-" + filepath.Base(workDir)
-	containerCheck := `set -e
-printf 'PYXIS_OK host=%s job=%s\n' "$(hostname)" "$SLURM_JOB_ID"
-getent hosts github.com >/dev/null
-timeout 15 bash -c 'exec 3<>/dev/tcp/github.com/443'
-printf 'GITHUB_TCP_OK\n'
-if [ -x /opt/actions-runner/bin/Runner.Listener ] && [ -x /opt/slurm-gha/bootstrap.sh ]; then
-  mkdir -p /runner/runner-smoke
-  cp -a /opt/actions-runner/. /runner/runner-smoke/
-  (cd /runner/runner-smoke && ./bin/Runner.Listener --version)
-  printf 'RUNNER_IMAGE_OK\n'
-fi`
-	commandArgs := []string{
-		"srun", "--nodes=1", "--ntasks=1", "--kill-on-bad-exit=1",
-		"--container-image=" + *image, "--container-mounts=" + workDir + ":/runner",
-		"--container-workdir=/runner", "--no-container-mount-home", "--no-container-entrypoint",
-		"/bin/bash", "-c", containerCheck,
+	commandArgs, environment, markers, err := buildSmokeCommand(
+		executionMode, *image, *vmImage, workDir, *cpus, *requireRunner,
+	)
+	if err != nil {
+		return err
 	}
 	for i := range commandArgs {
 		commandArgs[i] = shellQuote(commandArgs[i])
@@ -339,11 +358,9 @@ fi`
 	stderrPath := filepath.Join(workDir, "slurm.err")
 	jobID, err := client.Submit(context.Background(), slurm.SubmitRequest{
 		Name: "slurm-gha-smoke", Partition: *partition, Account: *account, QOS: *qos,
-		Nodes: 1, Tasks: 1, CPUsPerTask: 1, MemoryMiB: 512, WallMinutes: 5,
+		Nodes: 1, Tasks: 1, CPUsPerTask: *cpus, MemoryMiB: *memoryMiB, WallMinutes: 5,
 		WorkingDirectory: workDir, StandardOutput: stdoutPath, StandardError: stderrPath,
-		Correlation: correlation, Environment: map[string]string{
-			"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-		}, Script: script,
+		Correlation: correlation, Environment: environment, Script: script,
 	})
 	if err != nil {
 		return err
@@ -354,18 +371,80 @@ fi`
 			_ = client.Cancel(context.Background(), jobID)
 		}
 	}()
-	fmt.Printf("submitted smoke allocation %s; logs: %s\n", jobID.String(), workDir)
+	fmt.Printf("submitted %s smoke allocation %s; logs: %s\n", *mode, jobID.String(), workDir)
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
-	if err := waitForSmoke(ctx, client, jobID, stdoutPath, stderrPath, *requireRunner); err != nil {
+	if err := waitForSmoke(ctx, client, jobID, stdoutPath, stderrPath, markers); err != nil {
 		return err
 	}
 	succeeded = true
-	fmt.Printf("smoke allocation %s passed Pyxis and GitHub egress checks\n", jobID.String())
+	fmt.Printf("smoke allocation %s passed %s and GitHub egress checks\n", jobID.String(), *mode)
 	return nil
 }
 
-func waitForSmoke(ctx context.Context, client *slurm.RESTClient, id slurm.JobID, stdoutPath, stderrPath string, requireRunner bool) error {
+func buildSmokeCommand(mode config.ExecutionMode, image, vmImage, workDir string, cpus int, requireRunner bool) ([]string, map[string]string, []string, error) {
+	marker := ""
+	environment := map[string]string{
+		"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+	}
+	guestCheck := `getent hosts github.com >/dev/null
+timeout 15 bash -c 'exec 3<>/dev/tcp/github.com/443'
+printf 'GITHUB_TCP_OK\n'`
+	if requireRunner {
+		guestCheck += `
+test -x /opt/actions-runner/bin/Runner.Listener
+test -x /opt/slurm-gha/bootstrap.sh
+mkdir -p /runner/runner-smoke
+cp -a /opt/actions-runner/. /runner/runner-smoke/
+(cd /runner/runner-smoke && ./bin/Runner.Listener --version)
+printf 'RUNNER_IMAGE_OK\n'`
+	}
+
+	var commandArgs []string
+	switch mode {
+	case config.ExecutionModePyxis:
+		if image == "" {
+			return nil, nil, nil, errors.New("slurm-smoke --mode=pyxis requires --image")
+		}
+		marker = "PYXIS_OK"
+		commandArgs = []string{
+			"srun", "--nodes=1", "--ntasks=1", fmt.Sprintf("--cpus-per-task=%d", cpus), "--kill-on-bad-exit=1",
+			"--container-image=" + image, "--container-mounts=" + workDir + ":/runner",
+			"--container-workdir=/runner", "--no-container-mount-home", "--no-container-entrypoint",
+			"/bin/bash", "-c",
+		}
+	case config.ExecutionModeVMoCS:
+		if vmImage == "" {
+			return nil, nil, nil, errors.New("slurm-smoke --mode=vmocs requires --vm-image")
+		}
+		marker = "VMOCS_OK"
+		nonce := filepath.Base(workDir)
+		environment["SLURM_GHA_SMOKE_NONCE"] = nonce
+		guestCheck = fmt.Sprintf("test \"$SLURM_GHA_SMOKE_NONCE\" = %s\ntest -n \"$SLURM_JOB_ID\"\nprintf 'VMOCS_ENV_OK\\n'\n", shellQuote(nonce)) + guestCheck
+		commandArgs = []string{
+			"srun", "--nodes=1", "--ntasks=1", fmt.Sprintf("--cpus-per-task=%d", cpus), "--kill-on-bad-exit=1", "--export=ALL",
+			"--vm-image=" + vmImage,
+			"--vm-forward-env=SLURM_GHA_SMOKE_NONCE", "--vm-forward-env=SLURM_JOB_ID",
+			"/bin/bash", "-c",
+		}
+	case config.ExecutionModeNative:
+		return nil, nil, nil, fmt.Errorf("slurm-smoke: %w", launch.ErrNativeNotImplemented)
+	default:
+		return nil, nil, nil, fmt.Errorf("slurm-smoke: unsupported execution mode %q", mode)
+	}
+	guestCheck = "set -euo pipefail\n" + fmt.Sprintf("printf '%s host=%%s job=%%s\\n' \"$(hostname)\" \"${SLURM_JOB_ID:-}\"\n", marker) + guestCheck
+	commandArgs = append(commandArgs, guestCheck)
+	markers := []string{marker, "GITHUB_TCP_OK"}
+	if mode == config.ExecutionModeVMoCS {
+		markers = append(markers, "VMOCS_ENV_OK")
+	}
+	if requireRunner {
+		markers = append(markers, "RUNNER_IMAGE_OK")
+	}
+	return commandArgs, environment, markers, nil
+}
+
+func waitForSmoke(ctx context.Context, client *slurm.RESTClient, id slurm.JobID, stdoutPath, stderrPath string, markers []string) error {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	seen := false
@@ -392,14 +471,18 @@ func waitForSmoke(ctx context.Context, client *slurm.RESTClient, id slurm.JobID,
 				}
 			}
 			stdout, _ := os.ReadFile(stdoutPath)
-			markers := strings.Contains(string(stdout), "PYXIS_OK") && strings.Contains(string(stdout), "GITHUB_TCP_OK")
-			if requireRunner {
-				markers = markers && strings.Contains(string(stdout), "RUNNER_IMAGE_OK")
+			allMarkers := true
+			for _, marker := range markers {
+				allMarkers = allMarkers && strings.Contains(string(stdout), marker)
 			}
-			if markers && (terminal || !found) {
+			if allMarkers && (terminal || !found) {
 				return nil
 			}
-			if seen && !found && !markers {
+			if terminal && !allMarkers {
+				stderr, _ := os.ReadFile(stderrPath)
+				return fmt.Errorf("smoke allocation completed without success markers; stdout: %s; stderr: %s", strings.TrimSpace(string(stdout)), strings.TrimSpace(string(stderr)))
+			}
+			if seen && !found && !allMarkers {
 				stderr, _ := os.ReadFile(stderrPath)
 				return fmt.Errorf("smoke allocation disappeared without success markers: %s", strings.TrimSpace(string(stderr)))
 			}

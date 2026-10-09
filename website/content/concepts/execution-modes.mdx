@@ -1,0 +1,71 @@
+---
+title: Execution modes
+description: Choose native, Pyxis container, or VMoCS VM launch behavior for each runner class
+menu-position: 2
+keywords: ['execution mode', 'Pyxis', 'Enroot', 'VMoCS', 'virtual machine', 'native']
+---
+
+Every scale set selects one launch backend with `execution.mode`. Lease ownership, Slurm submission, JIT claims, and reconciliation stay the same; only the allocation's `srun` step changes.
+
+| Mode | Environment | `execution.image` | Status |
+| --- | --- | --- | --- |
+| `pyxis` | Pyxis/Enroot container | OCI reference or shared SquashFS path | Implemented and end-to-end verified |
+| `vmocs` | VMoCS virtual machine | VMoCS template name passed to `--vm-image` | Implemented; end-to-end runner test pending |
+| `native` | Compute-node host | Not used | Reserved, not implemented |
+
+## Pyxis container mode
+
+```yaml
+execution:
+  mode: "pyxis"
+  image: "/cluster/images/actions-runner-2.337.0.sqsh"
+  scratchRoot: "/shared/slurm-gha/scratch"
+  mountHome: false
+  extraMounts: []
+```
+
+The backend mounts private runner work and persistent diagnostics, disables the image entrypoint and home mount by default, and executes `/opt/slurm-gha/bootstrap.sh` in the container.
+
+## VMoCS VM mode
+
+```yaml
+execution:
+  mode: "vmocs"
+  image: "base-ubuntu"
+  scratchRoot: "/shared/slurm-gha/scratch"
+```
+
+The backend asks the VMoCS SPANK plugin to boot the template and securely forwards only these named variables into the guest command:
+
+- `SLURM_GHA_SERVICE_URL`
+- `SLURM_GHA_LEASE_ID`
+- `SLURM_GHA_CLASS`
+- `SLURM_GHA_CLAIM_TOKEN`
+- `SLURM_JOB_ID`
+- `SLURM_GHA_CA_FILE` when a private callback CA is configured
+
+It then runs `/opt/slurm-gha/bootstrap.sh` inside the VM. Values remain out of the batch script and SSH command arguments. This requires VMoCS 0.1.2 or newer and its repeatable `--vm-forward-env=NAME` option.
+
+`mountHome` and `extraMounts` are Pyxis-only; configuration validation rejects them for VMoCS. VM devices, disks, and other template policy remain in VMoCS configuration.
+
+Follow [prepare a runner image](/getting-started/runner-image/) for the guest filesystem, dependencies, permissions, private CA, and smoke-test checklist.
+
+<Note variant="warning">
+  The prepared runner image contract has been validated, but a complete GitHub Actions workflow still requires a site VMoCS plugin that preserves repeated `--vm-forward-env` options.
+</Note>
+
+## Native host mode
+
+The schema reserves `native` with an absolute `runnerPath`, but the backend deliberately returns `native execution mode is reserved but not implemented`. `validate-config` accepts the reserved shape; `doctor` and `serve` reject it.
+
+## Adding another Slurm launch plugin
+
+The controller depends on a small backend interface rather than plugin-specific branches. A new integration needs:
+
+1. A renderer that produces the mode's `srun` command and environment contract.
+2. One entry in the backend registry.
+3. Mode-specific strict configuration validation.
+4. Secret-leakage and controller-submission tests.
+5. An image contract, smoke path, and compatibility evidence.
+
+This separation keeps GitHub and Slurm lifecycle behavior independent of how the worker environment starts.

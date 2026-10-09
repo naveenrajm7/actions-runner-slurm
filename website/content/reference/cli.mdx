@@ -29,7 +29,7 @@ Success prints `configuration is valid`.
 
 ## `doctor`
 
-Validate configuration, ping `slurmrestd`, and check absolute Pyxis image paths.
+Validate configuration and backend availability, ping `slurmrestd`, and check absolute Pyxis image paths. VMoCS templates are resolved on compute nodes and must be tested with `slurm-smoke`.
 
 ```bash
 slurm-gha doctor --config /etc/slurm-gha/config.yaml
@@ -59,10 +59,13 @@ The output path must be absolute. The command creates a mode-`0600` file and ref
 
 ## `slurm-smoke`
 
-Submit a small Pyxis allocation and verify compute-node DNS and GitHub TCP/443 egress.
+Submit a small Pyxis or VMoCS allocation and verify compute-node DNS and GitHub TCP/443 egress.
+
+Pyxis example:
 
 ```bash
 slurm-gha slurm-smoke \
+  --mode pyxis \
   --base-url https://slurm-api.example.org \
   --api-version v0.0.42 \
   --user github-ci \
@@ -76,17 +79,41 @@ slurm-gha slurm-smoke \
   --require-runner
 ```
 
-Required flags are `--base-url`, `--user`, `--token-file`, `--account`, `--image`, and the absolute `--work-root`.
+VMoCS example:
+
+```bash
+slurm-gha slurm-smoke \
+  --mode vmocs \
+  --base-url https://slurm-api.example.org \
+  --api-version v0.0.42 \
+  --user github-ci \
+  --token-file /run/secrets/slurm-jwt \
+  --partition vm \
+  --account vm \
+  --vm-image base-ubuntu \
+  --cpus 2 \
+  --memory-mib 2048 \
+  --work-root /shared/slurm-gha-smoke \
+  --timeout 5m \
+  --require-runner
+```
+
+Both modes require `--base-url`, `--user`, `--token-file`, `--account`, and the absolute `--work-root`. Pyxis additionally requires `--image`; VMoCS requires `--vm-image`.
 
 | Flag | Default | Description |
 | --- | --- | --- |
+| `--mode` | `pyxis` | Execution backend: `pyxis` or `vmocs`. Native is not implemented. |
+| `--image` | Empty | Required Pyxis image reference or SquashFS path. |
+| `--vm-image` | Empty | Required VMoCS template name. |
 | `--api-version` | `v0.0.42` | Slurm REST data parser. |
 | `--partition` | `defq` | Test partition. |
 | `--qos` | Empty | Optional test QOS. |
+| `--cpus` | `1` | CPUs assigned to the task and, for VMoCS, mapped to guest vCPUs. |
+| `--memory-mib` | `512` | Memory assigned to the node. Use at least `2048` for the initial Ubuntu VM test. |
 | `--timeout` | `5m` | Maximum wait for the allocation. |
 | `--require-runner` | `false` | Also verify the official runner and bootstrap files in the image. |
 
-The command prints the submitted job ID and the directory containing `slurm.out` and `slurm.err`.
+The VMoCS smoke path also forwards both a nonce and `SLURM_JOB_ID` by name and verifies them inside the guest. This deliberately checks that repeated `--vm-forward-env` options work, because the production backend forwards several bootstrap variables. The command prints the submitted job ID and the directory containing `slurm.out` and `slurm.err`.
 
 ## `version`
 

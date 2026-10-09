@@ -5,7 +5,7 @@ menu-position: 7
 keywords: ['troubleshooting', 'logs', 'queued', 'TLS']
 ---
 
-Start with the narrowest failing boundary. Actions Runner Slurm connects four systems: GitHub, the service process, `slurmrestd`, and the Pyxis allocation.
+Start with the narrowest failing boundary. Actions Runner Slurm connects GitHub, the service process, `slurmrestd`, and a Pyxis container or VMoCS VM allocation.
 
 ## Collect the basic state
 
@@ -38,7 +38,8 @@ Run `validate-config` directly. The parser rejects unknown keys as well as missi
 - A non-HTTPS `service.publicUrl` or `github.configUrl`.
 - `nodes` or `tasks` set to a value other than `1`.
 - `maxPending` greater than `maxRunners`.
-- `execution.mode: native` in the initial release.
+- `execution.mode: native`; the schema reserves it, but `doctor` and `serve` clearly reject the unimplemented backend.
+- A VMoCS template name containing unsupported characters, or Pyxis-only mounts on a VMoCS class.
 
 ### A credential has unsafe permissions
 
@@ -109,7 +110,8 @@ Check that:
 - `service.publicUrl` resolves to the service from compute nodes.
 - The certificate contains the hostname used in `publicUrl`.
 - `service.tls.caFile` contains the correct private CA and is readable on the service host.
-- The configured CA source path can be mounted by Pyxis.
+- In Pyxis mode, the configured CA source path can be mounted.
+- In VMoCS mode, the guest contains the CA at `/etc/slurm-gha/callback-ca.crt` and VMoCS forwards `SLURM_GHA_CA_FILE`.
 - Firewalls allow compute nodes to reach the callback port.
 - Slurm still reports the job as starting or running with the expected correlation comment and no restart.
 
@@ -119,8 +121,9 @@ The bootstrap retries transient claim failures. Repeated `409 Conflict` response
 
 Inspect the per-lease directory under `service.logRoot/<scale-set>/<lease-id>/`:
 
-- `slurm.out` and `slurm.err` contain allocation and Pyxis output.
-- Copied `_diag` files contain official Actions runner diagnostics.
+- `slurm.out` and `slurm.err` contain allocation and backend output.
+- In Pyxis mode, copied `_diag` files contain official Actions runner diagnostics.
+- In the initial VMoCS mode, guest `_diag` files are destroyed with the VM; use Slurm output until a per-allocation export is implemented.
 
 Confirm that the immutable image includes every tool required by the workflow. Container actions, job containers, and service containers fail because the initial runner environment does not provide a Docker daemon.
 
@@ -134,4 +137,16 @@ Compare all three ownership values before canceling anything:
 
 The controller deliberately refuses unsafe cancellation when ownership does not match. Preserve the state database and job records when reporting a reconciliation issue.
 
-If the problem persists, open a GitHub issue with secrets removed and include the service version, Slurm/Pyxis/Enroot versions, relevant structured logs, sanitized configuration, Slurm state and comment, and runner `_diag` excerpts.
+If the problem persists, open a GitHub issue with secrets removed and include the service version, Slurm and selected-backend versions, relevant structured logs, sanitized configuration, Slurm state and comment, and available runner `_diag` excerpts.
+
+## A VMoCS allocation boots but the runner does not start
+
+Run `slurm-smoke --mode vmocs --require-runner` first. Confirm that:
+
+- the compute nodes run a VMoCS build that exposes `--vm-image` and preserves repeated `--vm-forward-env` options, not merely one selection;
+- `/opt/actions-runner/bin/Runner.Listener` and `/opt/slurm-gha/bootstrap.sh` are executable in the guest;
+- `/runner` and `/runner-logs` already exist and are writable by the template's SSH user;
+- the guest can resolve GitHub and reach both GitHub TCP/443 and `service.publicUrl`;
+- the configured template runs attached commands as the user that owns the writable directories.
+
+`VMOCS_ENV_OK` in smoke output proves both the nonce and `SLURM_JOB_ID` reached the guest. If boot stops near the template's SSH timeout, inspect `systemd-networkd-wait-online`, netplan files, and the VMoCS serial console for stale build-time interfaces. A QMP broken-pipe warning after successful guest output is a teardown symptom; retain the full Slurm output and verify the final job exit status before deciding whether it caused the failure.

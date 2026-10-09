@@ -64,7 +64,7 @@ export default function Index({title = 'Actions Runner Slurm'}: IndexProps) {
               <Card href="#" hasBorder style={{width: '100%'}}>
                 <Card.Heading size="5">Configuration reference</Card.Heading>
                 <Card.Description>
-                  Review every service, GitHub, Slurm, resource, and Pyxis setting.
+                  Review every service, GitHub, Slurm, resource, and execution-mode setting.
                 </Card.Description>
               </Card>
             </Link>

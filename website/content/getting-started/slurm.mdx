@@ -16,7 +16,7 @@ The identity needs enough Slurm authority to:
 - submit one-node, one-task jobs;
 - list jobs and observe their state and correlation comment;
 - cancel its own pending jobs during scale-down;
-- launch `srun` with the Pyxis options used by the service.
+- launch `srun` with the selected Pyxis or VMoCS plugin options used by the service.
 
 ## Obtain a renewable JWT
 
@@ -50,4 +50,4 @@ The initial release has been verified with Slurm 24.11.5 and data parser `v0.0.4
 
 The [compatibility reference](/reference/compatibility/) records the exact tested environment.
 
-Next, [build the runner image](/getting-started/runner-image/).
+Next, [prepare the runner image](/getting-started/runner-image/).

@@ -67,7 +67,7 @@ The token file is read before every request, so atomic token rotation does not r
 | `maxQueueWait` | Yes | Positive Go duration used in claim expiry planning. |
 | `startupTimeout` | Yes | Positive Go duration used in claim expiry planning. |
 | `slurm` | Yes | Fixed Slurm resource request. |
-| `execution` | Yes | Pyxis image, scratch, home, and mount settings. |
+| `execution` | Yes | Launch mode, image or template, and mode-specific settings. |
 
 ## `scaleSets[].slurm`
 
@@ -87,11 +87,12 @@ The token file is read before every request, so atomic token rotation does not r
 
 | Field | Required | Constraints and purpose |
 | --- | --- | --- |
-| `mode` | Yes | Must be `pyxis` for the initial release. Native execution is not implemented. |
-| `image` | Yes | Pyxis image reference or absolute shared SquashFS path. An absolute path is recommended and checked by `doctor`. |
+| `mode` | Yes | `pyxis` for a container, `vmocs` for a VM, or reserved `native`. Native is not implemented and is rejected by `doctor` and `serve`. |
+| `image` | Pyxis/VMoCS | Pyxis image reference or absolute shared SquashFS path in `pyxis` mode; VMoCS template name in `vmocs` mode. Absolute Pyxis paths are checked by `doctor`. |
+| `runnerPath` | Native shape only | Absolute runner path reserved for future native execution. |
 | `scratchRoot` | Yes | Absolute writable root used for disposable lease directories. |
-| `mountHome` | No | Defaults to `false`. Keep disabled unless workflows explicitly require and are trusted with the service account's home. |
-| `extraMounts` | No | Additional bind mounts. Use the smallest possible read-only set. |
+| `mountHome` | Pyxis only | Defaults to `false`. Keep disabled unless workflows explicitly require and are trusted with the service account's home. Rejected when enabled for VMoCS. |
+| `extraMounts` | Pyxis only | Additional bind mounts. Use the smallest possible read-only set. Rejected for VMoCS. |
 
 Each extra mount has these fields:
 
@@ -100,6 +101,17 @@ Each extra mount has these fields:
 | `source` | Yes | Absolute host path without comma or colon characters. |
 | `destination` | Yes | Absolute container path without comma or colon characters. |
 | `readOnly` | No | Adds a read-only Pyxis mount when `true`. |
+
+VMoCS uses the `image` value as the template name:
+
+```yaml
+execution:
+  mode: "vmocs"
+  image: "base-ubuntu"
+  scratchRoot: "/shared/slurm-gha/scratch"
+```
+
+See [execution modes](/concepts/execution-modes/) for the launch contract and [prepare a runner image](/getting-started/runner-image/) for guest requirements.
 
 ## Duration examples
 

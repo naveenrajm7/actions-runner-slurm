@@ -13,7 +13,10 @@ func TestRenderPyxisDoesNotPutSecretsInScript(t *testing.T) {
 		PublicURL: "https://service.example", LogRoot: "/logs",
 		TLS: config.TLSConfig{CAFile: "/secrets/callback-ca.crt"},
 	}
-	class := config.ScaleSetConfig{Name: "cpu", Execution: config.ExecutionConfig{Mode: "pyxis", Image: "/cluster/images/runner.sqsh", ScratchRoot: "/scratch"}}
+	class := config.ScaleSetConfig{
+		Name: "cpu", Slurm: config.ResourceConfig{CPUsPerTask: 2},
+		Execution: config.ExecutionConfig{Mode: config.ExecutionModePyxis, Image: "/cluster/images/runner.sqsh", ScratchRoot: "/scratch"},
+	}
 	lease := store.Lease{ID: "0123456789abcdef0123456789abcdef"}
 	rendered, err := RenderPyxis(service, class, lease, "top-secret-claim")
 	if err != nil {
@@ -21,6 +24,9 @@ func TestRenderPyxisDoesNotPutSecretsInScript(t *testing.T) {
 	}
 	if strings.Contains(rendered.Script, "top-secret-claim") {
 		t.Fatal("claim credential leaked into batch script")
+	}
+	if !strings.Contains(rendered.Script, "--cpus-per-task=2") {
+		t.Fatalf("script does not propagate CPUs per task:\n%s", rendered.Script)
 	}
 	if !strings.Contains(rendered.Script, "--no-container-mount-home") || !strings.Contains(rendered.Script, "--no-container-entrypoint") {
 		t.Fatalf("script does not set explicit Pyxis isolation flags:\n%s", rendered.Script)

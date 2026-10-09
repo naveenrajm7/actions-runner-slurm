@@ -18,13 +18,14 @@ import (
 )
 
 type Controller struct {
-	state   *store.Store
-	slurm   slurm.Client
-	service config.ServiceConfig
-	classes map[string]config.ScaleSetConfig
-	logger  *slog.Logger
-	now     func() time.Time
-	mu      sync.Mutex
+	state    *store.Store
+	slurm    slurm.Client
+	service  config.ServiceConfig
+	classes  map[string]config.ScaleSetConfig
+	backends map[string]launch.Backend
+	logger   *slog.Logger
+	now      func() time.Time
+	mu       sync.Mutex
 }
 
 func New(state *store.Store, slurmClient slurm.Client, service config.ServiceConfig, classes []config.ScaleSetConfig, logger *slog.Logger) (*Controller, error) {
@@ -35,13 +36,19 @@ func New(state *store.Store, slurmClient slurm.Client, service config.ServiceCon
 		logger = slog.New(slog.DiscardHandler)
 	}
 	byName := make(map[string]config.ScaleSetConfig, len(classes))
+	backends := make(map[string]launch.Backend, len(classes))
 	for _, class := range classes {
-		if class.Execution.Mode != "pyxis" {
-			return nil, fmt.Errorf("class %q uses execution mode %q; this prototype serves pyxis classes only", class.Name, class.Execution.Mode)
+		backend, err := launch.BackendForMode(class.Execution.Mode)
+		if err != nil {
+			return nil, fmt.Errorf("class %q: %w", class.Name, err)
+		}
+		if err := backend.Ready(); err != nil {
+			return nil, fmt.Errorf("class %q: %w", class.Name, err)
 		}
 		byName[class.Name] = class
+		backends[class.Name] = backend
 	}
-	return &Controller{state: state, slurm: slurmClient, service: service, classes: byName, logger: logger, now: time.Now}, nil
+	return &Controller{state: state, slurm: slurmClient, service: service, classes: byName, backends: backends, logger: logger, now: time.Now}, nil
 }
 
 func (c *Controller) SetDesired(ctx context.Context, className string, desired int) (int, error) {
@@ -164,7 +171,7 @@ func (c *Controller) provisionOne(ctx context.Context, class config.ScaleSetConf
 	if err := c.state.Transition(lease.ID, store.StateSubmitting, c.now()); err != nil {
 		return lease, err
 	}
-	rendered, err := launch.RenderPyxis(c.service, class, lease, token)
+	rendered, err := c.backends[class.Name].Render(c.service, class, lease, token)
 	if err != nil {
 		_ = c.state.Transition(lease.ID, store.StateTerminal, c.now())
 		return lease, err

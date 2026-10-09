@@ -1,7 +1,5 @@
 apiVersion: slurm-gha/v1alpha1
 
-# Pyxis/Enroot container example. See config-vmocs.yaml for VM mode.
-
 service:
   listenAddress: "0.0.0.0:8443"
   publicUrl: "https://slurm-gha.example.org:8443"
@@ -12,8 +10,8 @@ service:
   tls:
     certificateFile: "/etc/slurm-gha/tls.crt"
     keyFile: "/etc/slurm-gha/tls.key"
-    # Set for a private CA or a self-signed certificate; it is mounted read-only
-    # into each runner allocation for callback verification.
+    # If set, install this CA in the guest at
+    # /etc/slurm-gha/callback-ca.crt as well.
     caFile: "/etc/slurm-gha/callback-ca.crt"
 
 github:
@@ -32,24 +30,23 @@ slurm:
   requestTimeout: "30s"
 
 scaleSets:
-  - name: "slurm-cpu-small"
+  - name: "slurm-vm-small"
     runnerGroup: "slurm-ci"
     maxRunners: 10
     maxPending: 10
     maxQueueWait: "2h"
     startupTimeout: "10m"
     slurm:
-      partition: "cpu"
-      account: "ci"
+      partition: "vm"
+      account: "vm"
       qos: "normal"
       nodes: 1
       tasks: 1
-      cpusPerTask: 4
-      memory: "16G"
+      cpusPerTask: 2
+      memory: "2G"
       walltime: "01:00:00"
     execution:
-      mode: "pyxis"
-      image: "/cluster/images/actions-runner-2.337.0.sqsh"
+      mode: "vmocs"
+      # VMoCS template name, passed to srun as --vm-image=base-ubuntu.
+      image: "base-ubuntu"
       scratchRoot: "/scratch/github-ci"
-      mountHome: false
-      extraMounts: []

@@ -1,17 +1,17 @@
 ---
-title: Build the runner image
-description: Build and import the Pyxis and Enroot runner image
+title: Prepare a runner image
+description: Build a Pyxis container image or prepare a VMoCS VM guest
 menu-position: 5
-keywords: ['runner image', 'Pyxis', 'Enroot', 'SquashFS']
+keywords: ['runner image', 'Pyxis', 'Enroot', 'SquashFS', 'VMoCS', 'virtual machine']
 ---
 
-Every allocation starts an immutable image containing the official GitHub Actions runner and the Actions Runner Slurm bootstrap script. The provided image definition is currently Linux x86-64.
+Every allocation needs the official GitHub Actions runner and the Actions Runner Slurm bootstrap script. Pyxis reads them from an immutable container image; VMoCS reads them from its guest template. The provided container definition and initial VM contract are Linux x86-64.
 
 <Note variant="warning">
-  Pyxis execution is the only mode supported by the initial release. Setting `execution.mode` to `native` passes schema validation but is rejected when the service starts.
+  Choose the backend first. Pyxis is end-to-end verified; VMoCS support is implemented but still awaits a complete GitHub workflow test. See [execution modes](/concepts/execution-modes/).
 </Note>
 
-## Build the OCI image
+## Build the Pyxis OCI image
 
 From a checkout of the matching Actions Runner Slurm release, build the image supplied by the repository:
 
@@ -60,5 +60,46 @@ sudo -u github-ci /usr/local/bin/slurm-gha slurm-smoke \
 ```
 
 This submits a small allocation and verifies Pyxis startup, DNS, outbound TCP/443 to GitHub, and the runner/bootstrap files in the image.
+
+## Prepare a VMoCS guest
+
+Use VMoCS 0.1.2 or newer and prepare the selected template with:
+
+- Linux x86-64 for the currently pinned runner, or a runner distribution matching the guest architecture.
+- Official Actions runner v2.337.0 extracted at `/opt/actions-runner`; `bin/Runner.Listener` and `run.sh` must be executable.
+- The matching `images/runner/bootstrap.sh` installed executable at `/opt/slurm-gha/bootstrap.sh`.
+- `/bin/bash`, `/bin/sh`, `curl`, `git`, `ca-certificates`, `coreutils`, `getent`, `tar`, and all libraries installed by `bin/installdependencies.sh`.
+- `/runner` and `/runner-logs` created with mode `0700` and owned by the VMoCS template's SSH user. This is required when the attached command runs as a non-root user such as `ubuntu`.
+- Read and execute access to `/opt/actions-runner` and the bootstrap for that SSH user.
+- If `service.tls.caFile` is configured, the public CA certificate at `/etc/slurm-gha/callback-ca.crt`, readable by the SSH user.
+- Writable ephemeral disk space, guest DNS, outbound GitHub TCP/443, and HTTPS access to `service.publicUrl`.
+- Working VMoCS SSH/cloud-init setup for attached guest commands.
+- A VMoCS template definition visible to the Slurm service identity on every eligible compute node, rather than only in another user's private template file.
+
+Do not put the GitHub App key, Slurm JWT, JIT encryption key, claim token, or JIT configuration in the image.
+
+## Test VMoCS and environment forwarding
+
+```bash
+sudo -u github-ci /usr/local/bin/slurm-gha slurm-smoke \
+  --mode vmocs \
+  --base-url https://slurm-api.example.org \
+  --api-version v0.0.42 \
+  --user github-ci \
+  --token-file /run/secrets/slurm-jwt \
+  --partition vm \
+  --account vm \
+  --vm-image base-ubuntu \
+  --cpus 2 \
+  --memory-mib 2048 \
+  --work-root /shared/slurm-gha-smoke \
+  --require-runner
+```
+
+This test launches the VM, forwards and verifies a nonce through `--vm-forward-env`, checks DNS and GitHub TCP/443, and validates the runner/bootstrap files. It does not claim a GitHub runner. The next validation step is a disposable end-to-end workflow.
+
+<Note variant="warning">
+  `slurm.out` and `slurm.err` persist on the host. Runner `_diag` copied to `/runner-logs` remains inside the disposable VM in the initial implementation.
+</Note>
 
 Next, [configure the service](/getting-started/configure/).

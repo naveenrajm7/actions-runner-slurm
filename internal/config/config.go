@@ -17,6 +17,14 @@ import (
 
 const APIVersion = "slurm-gha/v1alpha1"
 
+type ExecutionMode string
+
+const (
+	ExecutionModeNative ExecutionMode = "native"
+	ExecutionModePyxis  ExecutionMode = "pyxis"
+	ExecutionModeVMoCS  ExecutionMode = "vmocs"
+)
+
 type Config struct {
 	APIVersion string           `yaml:"apiVersion"`
 	Service    ServiceConfig    `yaml:"service"`
@@ -92,7 +100,7 @@ type ResourceConfig struct {
 }
 
 type ExecutionConfig struct {
-	Mode        string        `yaml:"mode"`
+	Mode        ExecutionMode `yaml:"mode"`
 	Image       string        `yaml:"image"`
 	RunnerPath  string        `yaml:"runnerPath"`
 	ScratchRoot string        `yaml:"scratchRoot"`
@@ -281,16 +289,34 @@ func validateResources(prefix string, r *ResourceConfig) []error {
 func validateExecution(prefix string, e *ExecutionConfig) []error {
 	var errs []error
 	switch e.Mode {
-	case "pyxis":
+	case ExecutionModePyxis:
 		if e.Image == "" {
 			errs = append(errs, fmt.Errorf("%s.image is required in pyxis mode", prefix))
 		}
-	case "native":
+		if e.RunnerPath != "" {
+			errs = append(errs, fmt.Errorf("%s.runnerPath is available only in native mode", prefix))
+		}
+	case ExecutionModeVMoCS:
+		if e.Image == "" {
+			errs = append(errs, fmt.Errorf("%s.image is required in vmocs mode", prefix))
+		} else if !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`).MatchString(e.Image) {
+			errs = append(errs, fmt.Errorf("%s.image must be a VMoCS template name", prefix))
+		}
+		if e.MountHome || len(e.ExtraMounts) != 0 {
+			errs = append(errs, fmt.Errorf("%s.mountHome and extraMounts are available only in pyxis mode", prefix))
+		}
+		if e.RunnerPath != "" {
+			errs = append(errs, fmt.Errorf("%s.runnerPath is available only in native mode", prefix))
+		}
+	case ExecutionModeNative:
 		if err := requireAbsolute(prefix+".runnerPath", e.RunnerPath); err != nil {
 			errs = append(errs, err)
 		}
+		if e.Image != "" || e.MountHome || len(e.ExtraMounts) != 0 {
+			errs = append(errs, fmt.Errorf("%s.image, mountHome, and extraMounts are unavailable in native mode", prefix))
+		}
 	default:
-		errs = append(errs, fmt.Errorf("%s.mode must be pyxis or native", prefix))
+		errs = append(errs, fmt.Errorf("%s.mode must be pyxis, vmocs, or native", prefix))
 	}
 	if err := requireAbsolute(prefix+".scratchRoot", e.ScratchRoot); err != nil {
 		errs = append(errs, err)

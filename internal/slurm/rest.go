@@ -215,6 +215,31 @@ type jobsResponse struct {
 	Jobs []wireJob `json:"jobs"`
 }
 
+type cancelBody struct {
+	Jobs   []string `json:"jobs"`
+	Signal string   `json:"signal"`
+}
+
+type cancelResponse struct {
+	responseEnvelope
+	Status []cancelStatus `json:"status"`
+}
+
+type cancelStatus struct {
+	Error struct {
+		String  string `json:"string"`
+		Code    int32  `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+	StepID     string           `json:"step_id"`
+	JobID      noValue[uint32]  `json:"job_id"`
+	Federation cancelFederation `json:"federation"`
+}
+
+type cancelFederation struct {
+	Sibling string `json:"sibling"`
+}
+
 func (c *RESTClient) ListJobs(ctx context.Context) ([]Job, error) {
 	var response jobsResponse
 	if err := c.do(ctx, http.MethodGet, c.endpoint("jobs/"), nil, &response); err != nil {
@@ -249,8 +274,40 @@ func (c *RESTClient) Cancel(ctx context.Context, id JobID) error {
 	if id.ID <= 0 {
 		return errors.New("invalid Slurm job ID")
 	}
-	var response responseEnvelope
-	return c.do(ctx, http.MethodDelete, c.endpoint("job/"+strconv.FormatInt(id.ID, 10)), nil, &response)
+	// The singular DELETE /job/{id} handler rejects federation-encoded IDs
+	// above MAX_JOB_ID before contacting slurmctld. The plural handler accepts
+	// an explicit job list and delegates to the federation-aware kill path.
+	// Unlike the singular endpoint, it requires an explicit signal.
+	jobID := strconv.FormatInt(id.ID, 10)
+	body := cancelBody{Jobs: []string{jobID}, Signal: "SIGKILL"}
+	var response cancelResponse
+	if err := c.do(ctx, http.MethodDelete, c.endpoint("jobs/"), body, &response); err != nil {
+		return err
+	}
+	for _, result := range response.Status {
+		if result.Error.Code == 0 {
+			continue
+		}
+		target := result.StepID
+		if target == "" && result.JobID.Set {
+			target = strconv.FormatUint(uint64(result.JobID.Number), 10)
+		}
+		if target == "" {
+			target = jobID
+		}
+		message := result.Error.Message
+		if message == "" {
+			message = result.Error.String
+		}
+		if message == "" {
+			message = "unknown Slurm error"
+		}
+		if result.Federation.Sibling != "" {
+			target += " on federation sibling " + result.Federation.Sibling
+		}
+		return fmt.Errorf("cancel Slurm job %s: %s (code %d)", target, message, result.Error.Code)
+	}
+	return nil
 }
 
 func (c *RESTClient) endpoint(suffix string) string {

@@ -18,7 +18,7 @@ sudo install -o root -g github-ci -m 0640 ./tls.crt /etc/slurm-gha/tls.crt
 sudo install -o root -g github-ci -m 0640 ./tls.key /etc/slurm-gha/tls.key
 ```
 
-If the certificate uses a private CA, install the CA certificate as well. The service mounts `service.tls.caFile` read-only into each Pyxis allocation so the bootstrap can verify the callback.
+If the certificate uses a private CA, install the CA certificate as well. Pyxis mounts `service.tls.caFile` read-only into each allocation. A VMoCS guest instead needs the same public CA at `/etc/slurm-gha/callback-ca.crt`.
 
 ## Generate the JIT encryption key
 
@@ -93,6 +93,17 @@ Remove an optional CA or QOS field when your site does not use it. Do not add bl
 
 The scale-set `name` becomes the workflow's `runs-on` value. Each scale set maps one fixed GitHub label to one fixed Slurm resource template. Unknown workflow labels do not create resources dynamically.
 
+For a VMoCS class, replace the execution block with a template name:
+
+```yaml
+execution:
+  mode: "vmocs"
+  image: "base-ubuntu"
+  scratchRoot: "/shared/slurm-gha/scratch"
+```
+
+Do not set `mountHome` or `extraMounts` for VMoCS. See [execution modes](/concepts/execution-modes/) for all three mode states.
+
 ## Validate the configuration
 
 Run both checks as the service identity:
@@ -111,6 +122,6 @@ A successful validation prints:
 configuration is valid
 ```
 
-`doctor` checks the configuration, connects to `slurmrestd`, and confirms that each absolute Pyxis image path exists. It does not create the GitHub scale set or start a listener.
+`doctor` checks backend availability, connects to `slurmrestd`, and confirms that each absolute Pyxis image path exists. VMoCS template availability is checked only when an allocation reaches a compute node, so run the VMoCS smoke test before starting the service. `doctor` does not create the GitHub scale set or start a listener.
 
 Next, [start the service and run a workflow](/getting-started/run/).

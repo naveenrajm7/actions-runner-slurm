@@ -1,14 +1,14 @@
 ---
 title: Security model
 description: Understand credentials, isolation, callback verification, and workflow trust
-menu-position: 2
+menu-position: 3
 keywords: ['security', 'credentials', 'TLS', 'isolation']
 ---
 
 The initial security boundary assumes trusted private repositories, a dedicated Unix and Slurm identity, restricted GitHub runner groups, and carefully selected mounts.
 
 <Note variant="warning">
-  Pyxis and Enroot provide disposable filesystems, not hostile multi-tenant isolation. Workflow code runs with the Slurm identity's kernel privileges, network reachability, and access to configured mounts.
+  Pyxis/Enroot and VMoCS provide disposable environments, not a complete hostile multi-tenant boundary. Workflow code retains the access granted through the Slurm identity, selected backend, devices, storage, and network.
 </Note>
 
 ## Long-lived credentials
@@ -33,15 +33,15 @@ The service returns JIT data only after verifying the claim, job ID, cluster whe
 
 ## TLS
 
-The runner callback always uses HTTPS. TLS verification cannot be disabled. For a private CA, the service mounts `service.tls.caFile` read-only into the allocation and the bootstrap passes it explicitly to `curl`.
+The runner callback always uses HTTPS. TLS verification cannot be disabled. For a private CA, Pyxis mounts `service.tls.caFile` read-only into the allocation. A VMoCS guest must contain that CA at `/etc/slurm-gha/callback-ca.crt`. The bootstrap passes the applicable path explicitly to `curl`.
 
 Use HTTPS for `slurmrestd` as well. Configure `slurm.caFile` for a private Slurm CA; `slurm.insecureSkipVerify: true` is rejected.
 
 ## Filesystem exposure
 
-By default, the launcher disables the home mount and the container entrypoint. It creates a fresh private runner directory and removes it after the allocation step. Diagnostics are copied to the configured log directory.
+In Pyxis mode, the launcher disables the home mount and container entrypoint by default. It creates a fresh private runner directory and removes it after the allocation step. Diagnostics are copied to the configured log directory.
 
-Keep `mountHome: false`. Add `extraMounts` only after reviewing what untrusted workflow commands could read or modify. Prefer read-only mounts and dedicated, narrowly scoped data paths.
+Keep `mountHome: false`. Add `extraMounts` only after reviewing what untrusted workflow commands could read or modify. Prefer read-only mounts and dedicated, narrowly scoped data paths. In VMoCS mode, filesystem and device exposure comes from the site-managed template; the Actions Runner Slurm configuration does not add dynamic VM mounts.
 
 ## GitHub access policy
 
