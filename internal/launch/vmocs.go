@@ -65,22 +65,15 @@ func RenderVMoCS(service config.ServiceConfig, class config.ScaleSetConfig, leas
 		environment["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 	} else if guestOS == config.GuestOSWindows {
 		bootstrapCommand = []string{
-			"powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-File", vmocsWindowsBootstrapPath, "-LeaseInputStdin",
+			"powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-File", vmocsWindowsBootstrapPath,
 		}
 		callbackCAPath = vmocsWindowsCallbackCAPath
-		// VMoCS selected-environment staging is currently POSIX-specific and
-		// fails before command execution in Windows guests. The Windows backend
-		// therefore sends the same job-scoped values over the attached command's
-		// stdin; they remain absent from both the batch script and command line.
-		forward = nil
 	} else {
 		return RenderedJob{}, fmt.Errorf("unsupported VMoCS guest OS %q", guestOS)
 	}
 	if service.TLS.CAFile != "" {
 		environment["SLURM_GHA_CA_FILE"] = callbackCAPath
-		if guestOS == config.GuestOSLinux {
-			forward = append(forward, "SLURM_GHA_CA_FILE")
-		}
+		forward = append(forward, "SLURM_GHA_CA_FILE")
 	}
 
 	args := []string{
@@ -98,17 +91,6 @@ func RenderVMoCS(service config.ServiceConfig, class config.ScaleSetConfig, leas
 	}
 
 	command := strings.Join(args, " ")
-	if guestOS == config.GuestOSWindows {
-		command = fmt.Sprintf(`{
-  printf 'SLURM_GHA_STDIN_V1\n'
-  printf '%%s\n' "$SLURM_GHA_SERVICE_URL"
-  printf '%%s\n' "$SLURM_GHA_LEASE_ID"
-  printf '%%s\n' "$SLURM_GHA_CLASS"
-  printf '%%s\n' "$SLURM_GHA_CLAIM_TOKEN"
-  printf '%%s\n' "$SLURM_JOB_ID"
-  printf '%%s\n' "${SLURM_GHA_CA_FILE:-}"
-} | %s`, command)
-	}
 
 	script := fmt.Sprintf(`#!/usr/bin/env bash
 set -uo pipefail

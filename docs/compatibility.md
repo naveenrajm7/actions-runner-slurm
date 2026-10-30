@@ -11,7 +11,7 @@ Observed and tested October 4, 2026.
 | REST authentication | `X-SLURM-USER-NAME` plus renewable JWT in `X-SLURM-USER-TOKEN` |
 | Pyxis | 0.21.0 |
 | Enroot | 4.0.1 |
-| VMoCS | 0.1.3; Linux selected-variable forwarding and Windows stdin delivery pass |
+| VMoCS | 0.1.3 for Linux; Windows forwarding validated by `naveenrajm7/vmocs` PR #26 |
 | GitHub scale-set client | `github.com/actions/scaleset` v0.4.0 |
 | Actions runner | v2.337.0, Linux x64 and Windows x64 |
 | Ubuntu runner base | 24.04 index digest `sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55` |
@@ -55,7 +55,7 @@ A direct job forwarded two random values plus `SLURM_JOB_ID`; all three arrived 
 
 Observed October 30, 2026 with template `windows-rocm-10.1`. Slurm job 68214915 booted a Windows guest with PowerShell 5.1, reached GitHub over TCP/443, and detected an AMD Radeon AI PRO R9700 (`gfx1201`) with 31.86 GiB of global memory. A disposable copy of Actions runner v2.337.0 and `bootstrap.ps1` passed a local HTTPS claim integration, JIT environment delivery, secret cleanup, diagnostic copying, and nonzero runner-status propagation. The real runner also consumed `ACTIONS_RUNNER_INPUT_JITCONFIG` from the environment.
 
-Direct jobs showed that `--vm-forward-env` fails while staging even a single variable into this Windows guest. Job 68215027 verified that command stdin reaches PowerShell, so the Windows backend uses a versioned, fixed-field stdin record instead; Linux retains selected-environment forwarding. No lease value is embedded in the batch script or guest command arguments.
+The VMoCS build initially installed on the cluster could not stage even one `--vm-forward-env` value into the Windows guest. Job 68215027 verified command-stdin delivery as a diagnostic workaround. [VMoCS PR #26](https://github.com/naveenrajm7/vmocs/pull/26) subsequently added native secure Windows forwarding over a separate SSH staging connection, including protected ACLs, pre-launch cleanup, preserved child stdin, and exit-status propagation. The Windows backend now selects the same named variables as Linux and requires a VMoCS release containing that change.
 
 The unmodified `windows-rocm-10.1` template did not contain `C:\actions-runner`, `C:\slurm-gha`, `C:\runner`, or `C:\runner-logs`. A prepared derivative remains required before a real GitHub workflow can validate the full Windows path.
 

@@ -78,7 +78,7 @@ Use VMoCS 0.1.2 or newer and prepare the selected template with:
 
 Do not put the GitHub App key, Slurm JWT, JIT encryption key, claim token, or JIT configuration in the image.
 
-For `guestOS: windows`, install the Windows x64 runner at `C:\actions-runner`, `images/runner-vm/bootstrap.ps1` at `C:\slurm-gha\bootstrap.ps1`, and create writable `C:\runner` and `C:\runner-logs`. Install a configured private callback CA at `C:\slurm-gha\callback-ca.cer`. The image must provide `powershell.exe` and `curl.exe`. The cluster's `windows-rocm-10.1` base template does not contain this runner payload; publish a prepared derivative such as `windows-rocm-10.1-actions-runner` before enabling it in the service.
+For `guestOS: windows`, install the Windows x64 runner at `C:\actions-runner`, `images/runner-vm/bootstrap.ps1` at `C:\slurm-gha\bootstrap.ps1`, and create writable `C:\runner` and `C:\runner-logs`. Install a configured private callback CA at `C:\slurm-gha\callback-ca.cer`. The image must provide `powershell.exe` and `curl.exe`. Configure its VMoCS template with `ssh-command-style: windows`, `boot-mode: vagrant`, and `insert-key: true`. The cluster's `windows-rocm-10.1` base template does not contain this runner payload; publish a prepared derivative such as `windows-rocm-10.1-actions-runner` before enabling it in the service.
 
 ## Test VMoCS and environment forwarding
 
@@ -99,7 +99,7 @@ sudo -u github-ci /usr/local/bin/slurm-gha slurm-smoke \
   --require-runner
 ```
 
-This test launches the VM, checks DNS and GitHub TCP/443, and validates the runner/bootstrap files. A Linux guest verifies the nonce and `SLURM_JOB_ID` through repeated `--vm-forward-env` options. A Windows guest verifies the same values through the versioned stdin transport used by the production launcher. It does not claim a GitHub runner. The next validation step is a disposable end-to-end workflow.
+This test launches the VM, checks DNS and GitHub TCP/443, and validates the runner/bootstrap files. Both Linux and Windows verify a nonce and `SLURM_JOB_ID` through repeated `--vm-forward-env` options. Windows requires a VMoCS release containing [secure Windows forwarding](https://github.com/naveenrajm7/vmocs/pull/26). It does not claim a GitHub runner. The next validation step is a disposable end-to-end workflow.
 
 <Note variant="warning">
   `slurm.out` and `slurm.err` persist on the host. Runner `_diag` copied to `/runner-logs` remains inside the disposable VM in the initial implementation.

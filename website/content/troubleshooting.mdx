@@ -143,10 +143,10 @@ If the problem persists, open a GitHub issue with secrets removed and include th
 
 Run `slurm-smoke --mode vmocs --require-runner` first. Confirm that:
 
-- the compute nodes expose `--vm-image`; Linux guests also require repeated `--vm-forward-env` support, while Windows guests use stdin;
+- the compute nodes expose `--vm-image` and preserve repeated `--vm-forward-env` selections; Windows requires a VMoCS release containing secure Windows forwarding;
 - Linux has executable `/opt/actions-runner/bin/Runner.Listener` and `/opt/slurm-gha/bootstrap.sh`; Windows has `C:\actions-runner\bin\Runner.Listener.exe` and `C:\slurm-gha\bootstrap.ps1`;
 - Linux has writable `/runner` and `/runner-logs`; Windows has writable `C:\runner` and `C:\runner-logs`;
 - the guest can resolve GitHub and reach both GitHub TCP/443 and `service.publicUrl`;
 - the configured template runs attached commands as the user that owns the writable directories.
 
-`VMOCS_ENV_OK` in smoke output proves both the nonce and `SLURM_JOB_ID` reached the guest; Windows also prints `VMOCS_WINDOWS_OK`. If Linux boot stops near the template's SSH timeout, inspect `systemd-networkd-wait-online`, netplan files, and the VMoCS serial console for stale build-time interfaces. A QMP broken-pipe warning after successful guest output is a teardown symptom; retain the full Slurm output and verify the final job exit status before deciding whether it caused the failure.
+`VMOCS_ENV_OK` in smoke output proves both the nonce and `SLURM_JOB_ID` reached the guest; Windows also prints `VMOCS_WINDOWS_OK`. For Windows, confirm the template uses `ssh-command-style: windows`, `boot-mode: vagrant`, and `insert-key: true`. If Linux boot stops near the template's SSH timeout, inspect `systemd-networkd-wait-online`, netplan files, and the VMoCS serial console for stale build-time interfaces. A QMP broken-pipe warning after successful guest output is a teardown symptom; retain the full Slurm output and verify the final job exit status before deciding whether it caused the failure.

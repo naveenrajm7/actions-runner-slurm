@@ -74,7 +74,7 @@ See [execution modes](docs/execution-modes.md) for configuration and launch beha
 
 The image definition in [images/runner/Dockerfile](images/runner/Dockerfile) packages official Actions runner v2.337.0 and [the bootstrap](images/runner/bootstrap.sh) for Pyxis. A Linux VMoCS guest uses the same layout. A Windows VMoCS guest selected with `guestOS: windows` instead provides `C:\actions-runner` and [bootstrap.ps1](images/runner-vm/bootstrap.ps1) at `C:\slurm-gha\bootstrap.ps1`. Both bootstraps copy the distribution into a fresh writable directory, claim JIT over HTTPS, supply it through `ACTIONS_RUNNER_INPUT_JITCONFIG`, then remove the claim material before starting the runner.
 
-A Pyxis image must be imported to a site-readable squashfs path. A VMoCS template must be available on eligible compute nodes. Linux guests require VMoCS 0.1.3 or newer for repeatable selected-environment forwarding; Windows guests use a versioned stdin lease handoff because VMoCS environment staging is POSIX-specific. Docker-dependent Actions features are not supplied by either mode.
+A Pyxis image must be imported to a site-readable squashfs path. A VMoCS template must be available on eligible compute nodes. Linux guests require VMoCS 0.1.3 or newer for repeatable selected-environment forwarding. Windows guests require a VMoCS release containing [secure Windows environment forwarding](https://github.com/naveenrajm7/vmocs/pull/26), plus a template configured with `ssh-command-style: windows`, `boot-mode: vagrant`, and `insert-key: true`. Docker-dependent Actions features are not supplied by either mode.
 
 ## Configuration
 

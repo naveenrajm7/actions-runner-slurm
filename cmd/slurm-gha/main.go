@@ -447,10 +447,8 @@ printf 'RUNNER_IMAGE_OK\n'`
 		} else if guestOS == config.GuestOSWindows {
 			marker = "VMOCS_WINDOWS_OK"
 			guestCheck = fmt.Sprintf(`$ErrorActionPreference = 'Stop'
-$smokeNonce = [Console]::In.ReadLine()
-$slurmJobId = [Console]::In.ReadLine()
-if ($smokeNonce -ne '%s') { throw 'smoke nonce mismatch' }
-if ($slurmJobId -notmatch '^[0-9]+$') { throw 'missing Slurm job ID' }
+if ($env:SLURM_GHA_SMOKE_NONCE -ne '%s') { throw 'smoke nonce mismatch' }
+if ($env:SLURM_JOB_ID -notmatch '^[0-9]+$') { throw 'missing Slurm job ID' }
 Write-Output 'VMOCS_ENV_OK'
 Resolve-DnsName github.com -ErrorAction Stop | Out-Null
 if (-not (Test-NetConnection github.com -Port 443 -InformationLevel Quiet)) { throw 'GitHub TCP/443 failed' }
@@ -467,18 +465,10 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Output 'RUNNER_IMAGE_OK'`
 			}
 			guestCheck += "\nWrite-Output 'VMOCS_WINDOWS_OK'"
-			commandArgs = append(commandArgs, "powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command")
-			commandArgs = append(commandArgs, guestCheck)
-			quoted := make([]string, len(commandArgs))
-			for i, arg := range commandArgs {
-				quoted[i] = shellQuote(arg)
-			}
-			stdinCommand := `{ printf '%s\n' "$SLURM_GHA_SMOKE_NONCE"; printf '%s\n' "$SLURM_JOB_ID"; } | ` + strings.Join(quoted, " ")
-			markers := []string{marker, "GITHUB_TCP_OK", "VMOCS_ENV_OK"}
-			if requireRunner {
-				markers = append(markers, "RUNNER_IMAGE_OK")
-			}
-			return []string{"/bin/bash", "-c", stdinCommand}, environment, markers, nil
+			commandArgs = append(commandArgs,
+				"--vm-forward-env=SLURM_GHA_SMOKE_NONCE", "--vm-forward-env=SLURM_JOB_ID",
+				"powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
+			)
 		} else {
 			return nil, nil, nil, fmt.Errorf("slurm-smoke: unsupported VMoCS guest OS %q", guestOS)
 		}

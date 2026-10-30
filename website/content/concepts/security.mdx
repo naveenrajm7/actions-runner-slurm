@@ -33,7 +33,7 @@ The service returns JIT data only after verifying the claim, job ID, cluster whe
 
 ## TLS
 
-The runner callback always uses HTTPS. TLS verification cannot be disabled. For a private CA, Pyxis mounts `service.tls.caFile` read-only into the allocation. A VMoCS guest must contain that CA at `/etc/slurm-gha/callback-ca.crt` on Linux or `C:\slurm-gha\callback-ca.cer` on Windows. The bootstrap passes the applicable path explicitly to `curl`. Linux receives selected values through VMoCS environment forwarding; Windows receives the same job-scoped values over command stdin because VMoCS Windows environment staging is unavailable.
+The runner callback always uses HTTPS. TLS verification cannot be disabled. For a private CA, Pyxis mounts `service.tls.caFile` read-only into the allocation. A VMoCS guest must contain that CA at `/etc/slurm-gha/callback-ca.crt` on Linux or `C:\slurm-gha\callback-ca.cer` on Windows. The bootstrap passes the applicable path explicitly to `curl`. Both guest types receive only the explicitly selected job-scoped values through VMoCS environment forwarding.
 
 Use HTTPS for `slurmrestd` as well. Configure `slurm.caFile` for a private Slurm CA; `slurm.insecureSkipVerify: true` is rejected.
 

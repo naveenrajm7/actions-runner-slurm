@@ -45,14 +45,14 @@ The backend asks the VMoCS SPANK plugin to boot the template and securely forwar
 - `SLURM_JOB_ID`
 - `SLURM_GHA_CA_FILE` when a private callback CA is configured
 
-`guestOS` defaults to `linux`, which runs `/opt/slurm-gha/bootstrap.sh` and uses VMoCS selected-environment forwarding. Set `guestOS: windows` to run `powershell.exe -NoLogo -NoProfile -NonInteractive -File C:\slurm-gha\bootstrap.ps1 -LeaseInputStdin`; that path also selects the Windows callback CA path and avoids injecting a Linux `PATH`. Because VMoCS selected-environment staging is POSIX-specific, Windows receives a versioned lease record over command stdin. In both paths, values remain out of the batch script and SSH command arguments.
+`guestOS` defaults to `linux`, which runs `/opt/slurm-gha/bootstrap.sh`. Set `guestOS: windows` to run `powershell.exe -NoLogo -NoProfile -NonInteractive -File C:\slurm-gha\bootstrap.ps1`; that path also selects the Windows callback CA path and avoids injecting a Linux `PATH`. Both paths use repeatable VMoCS `--vm-forward-env` selections, keeping values out of the batch script and SSH command arguments while preserving the guest command's stdin.
 
 `mountHome` and `extraMounts` are Pyxis-only; configuration validation rejects them for VMoCS. VM devices, disks, and other template policy remain in VMoCS configuration.
 
 Follow [prepare a runner image](/getting-started/runner-image/) for the guest filesystem, dependencies, permissions, private CA, and smoke-test checklist.
 
 <Note variant="warning">
-  A Linux VMoCS workflow requires a site plugin that preserves repeated `--vm-forward-env` options. Windows does not use that facility, but it still requires a prepared template containing the Windows runner and bootstrap payload.
+  Both guest types require a site plugin that preserves repeated `--vm-forward-env` options. Windows additionally requires a VMoCS release containing [secure Windows forwarding](https://github.com/naveenrajm7/vmocs/pull/26), a prepared runner image, and template settings `ssh-command-style: windows`, `boot-mode: vagrant`, and `insert-key: true`.
 </Note>
 
 ## Native host mode

@@ -1,8 +1,3 @@
-[CmdletBinding()]
-param(
-    [switch] $LeaseInputStdin
-)
-
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
@@ -35,36 +30,7 @@ function Remove-RunnerEnvironment {
     }
 }
 
-function Import-LeaseInput {
-    $protocol = [Console]::In.ReadLine()
-    if ($protocol -ne 'SLURM_GHA_STDIN_V1') {
-        throw 'invalid or missing lease input protocol'
-    }
-    foreach ($name in @(
-        'SLURM_GHA_SERVICE_URL',
-        'SLURM_GHA_LEASE_ID',
-        'SLURM_GHA_CLASS',
-        'SLURM_GHA_CLAIM_TOKEN',
-        'SLURM_JOB_ID',
-        'SLURM_GHA_CA_FILE'
-    )) {
-        $value = [Console]::In.ReadLine()
-        if ($null -eq $value) {
-            throw "incomplete lease input: missing $name"
-        }
-        if ([string]::IsNullOrEmpty($value)) {
-            [Environment]::SetEnvironmentVariable($name, $null, 'Process')
-        }
-        else {
-            [Environment]::SetEnvironmentVariable($name, $value, 'Process')
-        }
-    }
-}
-
 try {
-    if ($LeaseInputStdin) {
-        Import-LeaseInput
-    }
     $serviceUrl = Require-EnvironmentVariable 'SLURM_GHA_SERVICE_URL'
     $leaseId = Require-EnvironmentVariable 'SLURM_GHA_LEASE_ID'
     $runnerClass = Require-EnvironmentVariable 'SLURM_GHA_CLASS'

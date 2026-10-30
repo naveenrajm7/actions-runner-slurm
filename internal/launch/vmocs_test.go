@@ -75,7 +75,13 @@ func TestRenderVMoCSWindowsUsesPowerShellAndWindowsPaths(t *testing.T) {
 	}
 	for _, want := range []string{
 		"powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-File",
-		`C:\slurm-gha\bootstrap.ps1`, "-LeaseInputStdin", "SLURM_GHA_STDIN_V1",
+		`C:\slurm-gha\bootstrap.ps1`,
+		"--vm-forward-env=SLURM_GHA_SERVICE_URL",
+		"--vm-forward-env=SLURM_GHA_LEASE_ID",
+		"--vm-forward-env=SLURM_GHA_CLASS",
+		"--vm-forward-env=SLURM_GHA_CLAIM_TOKEN",
+		"--vm-forward-env=SLURM_JOB_ID",
+		"--vm-forward-env=SLURM_GHA_CA_FILE",
 	} {
 		if !strings.Contains(rendered.Script, want) {
 			t.Errorf("Windows script is missing %q:\n%s", want, rendered.Script)
@@ -90,8 +96,8 @@ func TestRenderVMoCSWindowsUsesPowerShellAndWindowsPaths(t *testing.T) {
 	if strings.Contains(rendered.Script, vmocsLinuxBootstrapPath) {
 		t.Fatal("Windows job contains Linux bootstrap path")
 	}
-	if strings.Contains(rendered.Script, "--vm-forward-env=") {
-		t.Fatal("Windows job must use stdin instead of unsupported VMoCS environment staging")
+	if strings.Contains(rendered.Script, "LeaseInputStdin") || strings.Contains(rendered.Script, "SLURM_GHA_STDIN") {
+		t.Fatal("Windows job contains the obsolete application-specific stdin protocol")
 	}
 	if strings.Contains(rendered.Script, "claim") {
 		t.Fatal("claim credential leaked into Windows batch script")

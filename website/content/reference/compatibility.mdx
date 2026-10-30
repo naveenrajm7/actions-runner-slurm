@@ -14,7 +14,7 @@ The first cluster contract was observed and tested on October 4, 2026.
 | REST authentication | `X-SLURM-USER-NAME` and renewable JWT in `X-SLURM-USER-TOKEN` |
 | Pyxis | 0.21.0 |
 | Enroot | 4.0.1 |
-| VMoCS | 0.1.3; Linux selected-variable forwarding, Windows stdin delivery, and a Linux end-to-end workflow pass |
+| VMoCS | 0.1.3 for Linux; native Windows forwarding from VMoCS PR #26; Linux end-to-end workflow pass |
 | GitHub scale-set client | `github.com/actions/scaleset` v0.4.0 |
 | Actions runner | v2.337.0, Linux x64 and Windows x64 |
 | Runner base | Ubuntu 24.04 pinned by image digest |
@@ -39,7 +39,7 @@ A live integration job used the production renderer and claim handler, authentic
 
 A push-triggered workflow in a selected private repository then completed the VMoCS path. The listener submitted a Slurm allocation, the VM claimed and registered an ephemeral runner, and the validation job succeeded. Slurm recorded `COMPLETED`, exit code `0:0`; the runner deregistered automatically and no allocation remained queued.
 
-On October 30, 2026, template `windows-rocm-10.1` booted successfully with PowerShell 5.1, GitHub egress, and an AMD Radeon AI PRO R9700 (`gfx1201`). A disposable runner v2.337.0 passed the Windows bootstrap's HTTPS claim, JIT environment, cleanup, diagnostics, and exit-status checks. VMoCS selected-environment staging failed for the Windows guest, while stdin delivery passed, so the Windows backend uses a versioned stdin record. The base template lacks the permanent runner/bootstrap payload; a prepared derivative is still required for a complete GitHub Actions workflow.
+On October 30, 2026, template `windows-rocm-10.1` booted successfully with PowerShell 5.1, GitHub egress, and an AMD Radeon AI PRO R9700 (`gfx1201`). A disposable runner v2.337.0 passed the Windows bootstrap's HTTPS claim, JIT environment, cleanup, diagnostics, and exit-status checks. The older installed VMoCS build could not stage Windows environment values, but [VMoCS PR #26](https://github.com/naveenrajm7/vmocs/pull/26) subsequently validated native secure Windows forwarding. The base template still lacks the permanent runner/bootstrap payload; a prepared derivative and a VMoCS release containing PR #26 are required for a complete GitHub Actions workflow.
 
 ## REST endpoint behavior
 

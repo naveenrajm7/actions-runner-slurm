@@ -11,7 +11,8 @@ service:
     certificateFile: "/etc/slurm-gha/tls.crt"
     keyFile: "/etc/slurm-gha/tls.key"
     # If set, install this CA in the guest at
-    # /etc/slurm-gha/callback-ca.crt as well.
+    # /etc/slurm-gha/callback-ca.crt for Linux or
+    # C:\slurm-gha\callback-ca.cer for Windows.
     caFile: "/etc/slurm-gha/callback-ca.crt"
 
 github:

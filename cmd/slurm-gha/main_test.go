@@ -94,10 +94,17 @@ func TestBuildSmokeCommandVMoCSWindows(t *testing.T) {
 			t.Errorf("Windows smoke is missing %q", want)
 		}
 	}
-	if strings.Contains(command, "--vm-forward-env") {
-		t.Fatal("Windows smoke must avoid unsupported VMoCS environment staging")
+	for _, want := range []string{
+		"--vm-forward-env=SLURM_GHA_SMOKE_NONCE",
+		"--vm-forward-env=SLURM_JOB_ID",
+		"$env:SLURM_GHA_SMOKE_NONCE",
+		"$env:SLURM_JOB_ID",
+	} {
+		if !strings.Contains(command, want) {
+			t.Errorf("Windows smoke does not use VMoCS forwarding for %q", want)
+		}
 	}
-	if !strings.Contains(command, `[Console]::In.ReadLine()`) {
-		t.Fatal("Windows smoke does not read its selected values from stdin")
+	if strings.Contains(command, `[Console]::In.ReadLine()`) {
+		t.Fatal("Windows smoke must preserve stdin for the guest command")
 	}
 }
