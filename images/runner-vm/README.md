@@ -1,6 +1,6 @@
 # VMoCS guest preparation
 
-This directory documents the guest-side contract for `execution.mode: vmocs`. VMoCS owns the qcow2 image and template definition; Actions Runner Slurm expects these fixed paths inside the selected guest.
+This directory documents the guest-side contract for `execution.mode: vmocs`. VMoCS owns the qcow2 image and template definition. `execution.guestOS` selects the Linux or Windows contract and defaults to `linux`.
 
 ## Required layout
 
@@ -66,3 +66,15 @@ timeout 15 bash -c 'exec 3<>/dev/tcp/github.com/443'
 ```
 
 Then run the repository's `slurm-gha slurm-smoke --mode vmocs --require-runner` command. It additionally proves that the installed SPANK plugin preserves repeated forwarding options by delivering both a nonce and `SLURM_JOB_ID` into the guest.
+
+## Windows layout
+
+| Guest path | Requirement |
+| --- | --- |
+| `C:\actions-runner` | Official Windows x64 runner distribution; `bin\Runner.Listener.exe` and `run.cmd` present |
+| `C:\slurm-gha\bootstrap.ps1` | The matching repository [PowerShell bootstrap](bootstrap.ps1) |
+| `C:\runner` | Writable directory for the disposable runner copy and claim files |
+| `C:\runner-logs` | Writable diagnostic output directory |
+| `C:\slurm-gha\callback-ca.cer` | Public callback CA when `service.tls.caFile` is configured |
+
+The image must provide `powershell.exe` and `curl.exe`. The launcher invokes the bootstrap with `-LeaseInputStdin` because VMoCS selected-environment staging is not supported by Windows guests; the versioned lease record is streamed through stdin and never placed in command arguments. Never bake claim credentials or JIT configuration into the image. Validate it with `slurm-gha slurm-smoke --mode vmocs --guest-os windows --vm-image windows-rocm-10.1-actions-runner --require-runner` plus the normal Slurm connection flags.

@@ -297,6 +297,7 @@ func slurmSmoke(args []string) error {
 	mode := flags.String("mode", string(config.ExecutionModePyxis), "execution mode: pyxis or vmocs")
 	image := flags.String("image", "", "Pyxis image reference or squashfs path")
 	vmImage := flags.String("vm-image", "", "VMoCS template name")
+	guestOS := flags.String("guest-os", string(config.GuestOSLinux), "VMoCS guest OS: linux or windows")
 	workRoot := flags.String("work-root", "", "shared directory for smoke logs")
 	cpus := flags.Int("cpus", 1, "CPUs per task")
 	memoryMiB := flags.Uint64("memory-mib", 512, "memory per node in MiB")
@@ -320,9 +321,15 @@ func slurmSmoke(args []string) error {
 		if *image == "" {
 			return errors.New("slurm-smoke --mode=pyxis requires --image")
 		}
+		if config.GuestOS(*guestOS) != config.GuestOSLinux {
+			return errors.New("slurm-smoke --guest-os must be linux in pyxis mode")
+		}
 	case config.ExecutionModeVMoCS:
 		if *vmImage == "" {
 			return errors.New("slurm-smoke --mode=vmocs requires --vm-image")
+		}
+		if config.GuestOS(*guestOS) != config.GuestOSLinux && config.GuestOS(*guestOS) != config.GuestOSWindows {
+			return errors.New("slurm-smoke --guest-os must be linux or windows")
 		}
 	case config.ExecutionModeNative:
 		return fmt.Errorf("slurm-smoke: %w", launch.ErrNativeNotImplemented)
@@ -345,7 +352,7 @@ func slurmSmoke(args []string) error {
 	}
 	correlation := "slurm-gha/smoke-" + filepath.Base(workDir)
 	commandArgs, environment, markers, err := buildSmokeCommand(
-		executionMode, *image, *vmImage, workDir, *cpus, *requireRunner,
+		executionMode, config.GuestOS(*guestOS), *image, *vmImage, workDir, *cpus, *requireRunner,
 	)
 	if err != nil {
 		return err
@@ -382,10 +389,14 @@ func slurmSmoke(args []string) error {
 	return nil
 }
 
-func buildSmokeCommand(mode config.ExecutionMode, image, vmImage, workDir string, cpus int, requireRunner bool) ([]string, map[string]string, []string, error) {
+func buildSmokeCommand(mode config.ExecutionMode, guestOS config.GuestOS, image, vmImage, workDir string, cpus int, requireRunner bool) ([]string, map[string]string, []string, error) {
 	marker := ""
-	environment := map[string]string{
-		"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+	environment := map[string]string{}
+	if guestOS == "" {
+		guestOS = config.GuestOSLinux
+	}
+	if guestOS == config.GuestOSLinux {
+		environment["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 	}
 	guestCheck := `getent hosts github.com >/dev/null
 timeout 15 bash -c 'exec 3<>/dev/tcp/github.com/443'
@@ -403,6 +414,9 @@ printf 'RUNNER_IMAGE_OK\n'`
 	var commandArgs []string
 	switch mode {
 	case config.ExecutionModePyxis:
+		if guestOS != config.GuestOSLinux {
+			return nil, nil, nil, errors.New("slurm-smoke pyxis guest OS must be linux")
+		}
 		if image == "" {
 			return nil, nil, nil, errors.New("slurm-smoke --mode=pyxis requires --image")
 		}
@@ -417,22 +431,65 @@ printf 'RUNNER_IMAGE_OK\n'`
 		if vmImage == "" {
 			return nil, nil, nil, errors.New("slurm-smoke --mode=vmocs requires --vm-image")
 		}
-		marker = "VMOCS_OK"
 		nonce := filepath.Base(workDir)
 		environment["SLURM_GHA_SMOKE_NONCE"] = nonce
-		guestCheck = fmt.Sprintf("test \"$SLURM_GHA_SMOKE_NONCE\" = %s\ntest -n \"$SLURM_JOB_ID\"\nprintf 'VMOCS_ENV_OK\\n'\n", shellQuote(nonce)) + guestCheck
 		commandArgs = []string{
 			"srun", "--nodes=1", "--ntasks=1", fmt.Sprintf("--cpus-per-task=%d", cpus), "--kill-on-bad-exit=1", "--export=ALL",
 			"--vm-image=" + vmImage,
-			"--vm-forward-env=SLURM_GHA_SMOKE_NONCE", "--vm-forward-env=SLURM_JOB_ID",
-			"/bin/bash", "-c",
+		}
+		if guestOS == config.GuestOSLinux {
+			marker = "VMOCS_OK"
+			guestCheck = fmt.Sprintf("test \"$SLURM_GHA_SMOKE_NONCE\" = %s\ntest -n \"$SLURM_JOB_ID\"\nprintf 'VMOCS_ENV_OK\\n'\n", shellQuote(nonce)) + guestCheck
+			commandArgs = append(commandArgs,
+				"--vm-forward-env=SLURM_GHA_SMOKE_NONCE", "--vm-forward-env=SLURM_JOB_ID",
+				"/bin/bash", "-c",
+			)
+		} else if guestOS == config.GuestOSWindows {
+			marker = "VMOCS_WINDOWS_OK"
+			guestCheck = fmt.Sprintf(`$ErrorActionPreference = 'Stop'
+$smokeNonce = [Console]::In.ReadLine()
+$slurmJobId = [Console]::In.ReadLine()
+if ($smokeNonce -ne '%s') { throw 'smoke nonce mismatch' }
+if ($slurmJobId -notmatch '^[0-9]+$') { throw 'missing Slurm job ID' }
+Write-Output 'VMOCS_ENV_OK'
+Resolve-DnsName github.com -ErrorAction Stop | Out-Null
+if (-not (Test-NetConnection github.com -Port 443 -InformationLevel Quiet)) { throw 'GitHub TCP/443 failed' }
+Write-Output 'GITHUB_TCP_OK'`, strings.ReplaceAll(nonce, "'", "''"))
+			if requireRunner {
+				guestCheck += `
+if (-not (Test-Path -LiteralPath 'C:\actions-runner\bin\Runner.Listener.exe' -PathType Leaf)) { throw 'runner missing' }
+if (-not (Test-Path -LiteralPath 'C:\slurm-gha\bootstrap.ps1' -PathType Leaf)) { throw 'bootstrap missing' }
+Remove-Item -LiteralPath 'C:\runner\runner-smoke' -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path 'C:\runner\runner-smoke' | Out-Null
+Get-ChildItem -LiteralPath 'C:\actions-runner' -Force | Copy-Item -Destination 'C:\runner\runner-smoke' -Recurse -Force
+& 'C:\runner\runner-smoke\bin\Runner.Listener.exe' --version
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Write-Output 'RUNNER_IMAGE_OK'`
+			}
+			guestCheck += "\nWrite-Output 'VMOCS_WINDOWS_OK'"
+			commandArgs = append(commandArgs, "powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command")
+			commandArgs = append(commandArgs, guestCheck)
+			quoted := make([]string, len(commandArgs))
+			for i, arg := range commandArgs {
+				quoted[i] = shellQuote(arg)
+			}
+			stdinCommand := `{ printf '%s\n' "$SLURM_GHA_SMOKE_NONCE"; printf '%s\n' "$SLURM_JOB_ID"; } | ` + strings.Join(quoted, " ")
+			markers := []string{marker, "GITHUB_TCP_OK", "VMOCS_ENV_OK"}
+			if requireRunner {
+				markers = append(markers, "RUNNER_IMAGE_OK")
+			}
+			return []string{"/bin/bash", "-c", stdinCommand}, environment, markers, nil
+		} else {
+			return nil, nil, nil, fmt.Errorf("slurm-smoke: unsupported VMoCS guest OS %q", guestOS)
 		}
 	case config.ExecutionModeNative:
 		return nil, nil, nil, fmt.Errorf("slurm-smoke: %w", launch.ErrNativeNotImplemented)
 	default:
 		return nil, nil, nil, fmt.Errorf("slurm-smoke: unsupported execution mode %q", mode)
 	}
-	guestCheck = "set -euo pipefail\n" + fmt.Sprintf("printf '%s host=%%s job=%%s\\n' \"$(hostname)\" \"${SLURM_JOB_ID:-}\"\n", marker) + guestCheck
+	if guestOS == config.GuestOSLinux {
+		guestCheck = "set -euo pipefail\n" + fmt.Sprintf("printf '%s host=%%s job=%%s\\n' \"$(hostname)\" \"${SLURM_JOB_ID:-}\"\n", marker) + guestCheck
+	}
 	commandArgs = append(commandArgs, guestCheck)
 	markers := []string{marker, "GITHUB_TCP_OK"}
 	if mode == config.ExecutionModeVMoCS {

@@ -18,11 +18,14 @@ import (
 const APIVersion = "slurm-gha/v1alpha1"
 
 type ExecutionMode string
+type GuestOS string
 
 const (
 	ExecutionModeNative ExecutionMode = "native"
 	ExecutionModePyxis  ExecutionMode = "pyxis"
 	ExecutionModeVMoCS  ExecutionMode = "vmocs"
+	GuestOSLinux        GuestOS       = "linux"
+	GuestOSWindows      GuestOS       = "windows"
 )
 
 type Config struct {
@@ -101,6 +104,7 @@ type ResourceConfig struct {
 
 type ExecutionConfig struct {
 	Mode        ExecutionMode `yaml:"mode"`
+	GuestOS     GuestOS       `yaml:"guestOS"`
 	Image       string        `yaml:"image"`
 	RunnerPath  string        `yaml:"runnerPath"`
 	ScratchRoot string        `yaml:"scratchRoot"`
@@ -288,8 +292,14 @@ func validateResources(prefix string, r *ResourceConfig) []error {
 
 func validateExecution(prefix string, e *ExecutionConfig) []error {
 	var errs []error
+	if e.GuestOS == "" {
+		e.GuestOS = GuestOSLinux
+	}
 	switch e.Mode {
 	case ExecutionModePyxis:
+		if e.GuestOS != GuestOSLinux {
+			errs = append(errs, fmt.Errorf("%s.guestOS must be linux in pyxis mode", prefix))
+		}
 		if e.Image == "" {
 			errs = append(errs, fmt.Errorf("%s.image is required in pyxis mode", prefix))
 		}
@@ -297,6 +307,9 @@ func validateExecution(prefix string, e *ExecutionConfig) []error {
 			errs = append(errs, fmt.Errorf("%s.runnerPath is available only in native mode", prefix))
 		}
 	case ExecutionModeVMoCS:
+		if e.GuestOS != GuestOSLinux && e.GuestOS != GuestOSWindows {
+			errs = append(errs, fmt.Errorf("%s.guestOS must be linux or windows in vmocs mode", prefix))
+		}
 		if e.Image == "" {
 			errs = append(errs, fmt.Errorf("%s.image is required in vmocs mode", prefix))
 		} else if !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`).MatchString(e.Image) {
@@ -309,6 +322,9 @@ func validateExecution(prefix string, e *ExecutionConfig) []error {
 			errs = append(errs, fmt.Errorf("%s.runnerPath is available only in native mode", prefix))
 		}
 	case ExecutionModeNative:
+		if e.GuestOS != GuestOSLinux {
+			errs = append(errs, fmt.Errorf("%s.guestOS must be linux in native mode", prefix))
+		}
 		if err := requireAbsolute(prefix+".runnerPath", e.RunnerPath); err != nil {
 			errs = append(errs, err)
 		}

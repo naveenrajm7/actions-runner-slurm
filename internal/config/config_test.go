@@ -56,6 +56,20 @@ func TestValidateExecutionModes(t *testing.T) {
 			config: ExecutionConfig{Mode: ExecutionModeVMoCS, Image: "base-ubuntu", ScratchRoot: "/scratch"},
 		},
 		{
+			name:   "vmocs windows",
+			config: ExecutionConfig{Mode: ExecutionModeVMoCS, GuestOS: GuestOSWindows, Image: "windows-runner", ScratchRoot: "/scratch"},
+		},
+		{
+			name:    "vmocs rejects unknown guest OS",
+			config:  ExecutionConfig{Mode: ExecutionModeVMoCS, GuestOS: "plan9", Image: "base", ScratchRoot: "/scratch"},
+			wantErr: "guestOS must be linux or windows",
+		},
+		{
+			name:    "pyxis rejects windows",
+			config:  ExecutionConfig{Mode: ExecutionModePyxis, GuestOS: GuestOSWindows, Image: "/image.sqsh", ScratchRoot: "/scratch"},
+			wantErr: "guestOS must be linux",
+		},
+		{
 			name:    "vmocs requires template",
 			config:  ExecutionConfig{Mode: ExecutionModeVMoCS, ScratchRoot: "/scratch"},
 			wantErr: "image is required in vmocs mode",

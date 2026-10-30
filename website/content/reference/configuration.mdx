@@ -88,6 +88,7 @@ The token file is read before every request, so atomic token rotation does not r
 | Field | Required | Constraints and purpose |
 | --- | --- | --- |
 | `mode` | Yes | `pyxis` for a container, `vmocs` for a VM, or reserved `native`. Native is not implemented and is rejected by `doctor` and `serve`. |
+| `guestOS` | No | Guest OS. Defaults to `linux`; `windows` is supported for VMoCS only. |
 | `image` | Pyxis/VMoCS | Pyxis image reference or absolute shared SquashFS path in `pyxis` mode; VMoCS template name in `vmocs` mode. Absolute Pyxis paths are checked by `doctor`. |
 | `runnerPath` | Native shape only | Absolute runner path reserved for future native execution. |
 | `scratchRoot` | Yes | Absolute writable root used for disposable lease directories. |
@@ -107,6 +108,7 @@ VMoCS uses the `image` value as the template name:
 ```yaml
 execution:
   mode: "vmocs"
+  guestOS: "linux"
   image: "base-ubuntu"
   scratchRoot: "/shared/slurm-gha/scratch"
 ```

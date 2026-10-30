@@ -38,7 +38,7 @@ func TestRenderVMoCSForwardsOnlyNamedRunnerVariables(t *testing.T) {
 		"--vm-forward-env=SLURM_GHA_CLAIM_TOKEN",
 		"--vm-forward-env=SLURM_JOB_ID",
 		"--vm-forward-env=SLURM_GHA_CA_FILE",
-		vmocsBootstrapPath,
+		vmocsLinuxBootstrapPath,
 	} {
 		if !strings.Contains(rendered.Script, want) {
 			t.Errorf("script is missing %q:\n%s", want, rendered.Script)
@@ -50,11 +50,51 @@ func TestRenderVMoCSForwardsOnlyNamedRunnerVariables(t *testing.T) {
 	if rendered.Environment["SLURM_GHA_SERVICE_URL"] != "https://service.example" {
 		t.Fatalf("service URL = %q", rendered.Environment["SLURM_GHA_SERVICE_URL"])
 	}
-	if rendered.Environment["SLURM_GHA_CA_FILE"] != vmocsCallbackCAPath {
-		t.Fatalf("guest CA path = %q, want %q", rendered.Environment["SLURM_GHA_CA_FILE"], vmocsCallbackCAPath)
+	if rendered.Environment["SLURM_GHA_CA_FILE"] != vmocsLinuxCallbackCAPath {
+		t.Fatalf("guest CA path = %q, want %q", rendered.Environment["SLURM_GHA_CA_FILE"], vmocsLinuxCallbackCAPath)
 	}
 	if strings.Contains(rendered.Script, service.TLS.CAFile) {
 		t.Fatal("host callback CA path must not be passed to the VM")
+	}
+}
+
+func TestRenderVMoCSWindowsUsesPowerShellAndWindowsPaths(t *testing.T) {
+	class := config.ScaleSetConfig{
+		Name: "windows-vm", Slurm: config.ResourceConfig{CPUsPerTask: 4},
+		Execution: config.ExecutionConfig{
+			Mode: config.ExecutionModeVMoCS, GuestOS: config.GuestOSWindows,
+			Image: "windows-rocm-10.1-actions-runner", ScratchRoot: "/scratch/windows",
+		},
+	}
+	rendered, err := RenderVMoCS(
+		config.ServiceConfig{PublicURL: "https://service.example", LogRoot: "/logs", TLS: config.TLSConfig{CAFile: "/host/ca.pem"}},
+		class, store.Lease{ID: "0123456789abcdef0123456789abcdef"}, "claim",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-File",
+		`C:\slurm-gha\bootstrap.ps1`, "-LeaseInputStdin", "SLURM_GHA_STDIN_V1",
+	} {
+		if !strings.Contains(rendered.Script, want) {
+			t.Errorf("Windows script is missing %q:\n%s", want, rendered.Script)
+		}
+	}
+	if _, ok := rendered.Environment["PATH"]; ok {
+		t.Fatal("Linux PATH must not be injected into a Windows guest")
+	}
+	if got := rendered.Environment["SLURM_GHA_CA_FILE"]; got != vmocsWindowsCallbackCAPath {
+		t.Fatalf("guest CA path = %q, want %q", got, vmocsWindowsCallbackCAPath)
+	}
+	if strings.Contains(rendered.Script, vmocsLinuxBootstrapPath) {
+		t.Fatal("Windows job contains Linux bootstrap path")
+	}
+	if strings.Contains(rendered.Script, "--vm-forward-env=") {
+		t.Fatal("Windows job must use stdin instead of unsupported VMoCS environment staging")
+	}
+	if strings.Contains(rendered.Script, "claim") {
+		t.Fatal("claim credential leaked into Windows batch script")
 	}
 }
 

@@ -47,6 +47,7 @@ scaleSets:
       walltime: "01:00:00"
     execution:
       mode: "vmocs"
+      guestOS: "linux"
       # VMoCS template name, passed to srun as --vm-image=base-ubuntu.
       image: "base-ubuntu"
       scratchRoot: "/scratch/github-ci"

@@ -12,7 +12,7 @@ import (
 
 func TestBuildSmokeCommandVMoCSChecksEnvironmentForwarding(t *testing.T) {
 	args, environment, markers, err := buildSmokeCommand(
-		config.ExecutionModeVMoCS, "", "base-ubuntu", "/shared/smoke-123", 2, true,
+		config.ExecutionModeVMoCS, config.GuestOSLinux, "", "base-ubuntu", "/shared/smoke-123", 2, true,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -46,7 +46,7 @@ func TestBuildSmokeCommandVMoCSChecksEnvironmentForwarding(t *testing.T) {
 
 func TestBuildSmokeCommandKeepsPyxisInterface(t *testing.T) {
 	args, environment, markers, err := buildSmokeCommand(
-		config.ExecutionModePyxis, "/images/runner.sqsh", "", "/shared/smoke-123", 4, false,
+		config.ExecutionModePyxis, config.GuestOSLinux, "/images/runner.sqsh", "", "/shared/smoke-123", 4, false,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -66,8 +66,38 @@ func TestBuildSmokeCommandKeepsPyxisInterface(t *testing.T) {
 }
 
 func TestBuildSmokeCommandRejectsNative(t *testing.T) {
-	_, _, _, err := buildSmokeCommand(config.ExecutionModeNative, "", "", "/shared/smoke", 1, false)
+	_, _, _, err := buildSmokeCommand(config.ExecutionModeNative, config.GuestOSLinux, "", "", "/shared/smoke", 1, false)
 	if !errors.Is(err, launch.ErrNativeNotImplemented) {
 		t.Fatalf("error = %v, want ErrNativeNotImplemented", err)
+	}
+}
+
+func TestBuildSmokeCommandVMoCSWindows(t *testing.T) {
+	args, environment, markers, err := buildSmokeCommand(
+		config.ExecutionModeVMoCS, config.GuestOSWindows, "", "windows-runner", "/shared/smoke-123", 2, true,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := strings.Join(args, " ")
+	for _, want := range []string{"powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command"} {
+		if !strings.Contains(command, want) {
+			t.Errorf("command %q does not contain %q", command, want)
+		}
+	}
+	if _, ok := environment["PATH"]; ok {
+		t.Fatal("Windows smoke must not inject a Linux PATH")
+	}
+	check := command
+	for _, want := range []string{`C:\actions-runner`, `C:\slurm-gha\bootstrap.ps1`, "VMOCS_WINDOWS_OK", "VMOCS_ENV_OK", "RUNNER_IMAGE_OK"} {
+		if !strings.Contains(check, want) || !slices.Contains(markers, want) && strings.HasSuffix(want, "_OK") {
+			t.Errorf("Windows smoke is missing %q", want)
+		}
+	}
+	if strings.Contains(command, "--vm-forward-env") {
+		t.Fatal("Windows smoke must avoid unsupported VMoCS environment staging")
+	}
+	if !strings.Contains(command, `[Console]::In.ReadLine()`) {
+		t.Fatal("Windows smoke does not read its selected values from stdin")
 	}
 }

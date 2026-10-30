@@ -11,9 +11,9 @@ Observed and tested October 4, 2026.
 | REST authentication | `X-SLURM-USER-NAME` plus renewable JWT in `X-SLURM-USER-TOKEN` |
 | Pyxis | 0.21.0 |
 | Enroot | 4.0.1 |
-| VMoCS | 0.1.3; repeatable selected-variable forwarding passes |
+| VMoCS | 0.1.3; Linux selected-variable forwarding and Windows stdin delivery pass |
 | GitHub scale-set client | `github.com/actions/scaleset` v0.4.0 |
-| Actions runner | v2.337.0, Linux x64 SHA-256 `70920811a4f8ad4328818682bca5c6469c1c942fab52448868071d0063816613` |
+| Actions runner | v2.337.0, Linux x64 and Windows x64 |
 | Ubuntu runner base | 24.04 index digest `sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55` |
 | Go | 1.27.1 |
 
@@ -50,6 +50,14 @@ The host and guest SHA-256 values matched. This verifies selected-variable deliv
 The Actions Runner Slurm VMoCS backend uses the same mechanism for several lease callback variables, so repeatability is part of the required contract. An initial 0.1.2 REST smoke exposed a failure where the guest received the last selected variable but not the preceding nonce. VMoCS 0.1.3 and its corrected SPANK plugin were then installed on the controller and all schedulable VM nodes.
 
 A direct job forwarded two random values plus `SLURM_JOB_ID`; all three arrived in the guest and both host/guest SHA-256 pairs matched. A REST-submitted `slurm-gha slurm-smoke` then booted the VM without a node constraint, received the repeated environment values, saw the requested 2 vCPUs, validated runner v2.337.0 and the executable bootstrap, and reached GitHub. This closes the repeatable-forwarding blocker.
+
+## Windows VMoCS result
+
+Observed October 30, 2026 with template `windows-rocm-10.1`. Slurm job 68214915 booted a Windows guest with PowerShell 5.1, reached GitHub over TCP/443, and detected an AMD Radeon AI PRO R9700 (`gfx1201`) with 31.86 GiB of global memory. A disposable copy of Actions runner v2.337.0 and `bootstrap.ps1` passed a local HTTPS claim integration, JIT environment delivery, secret cleanup, diagnostic copying, and nonzero runner-status propagation. The real runner also consumed `ACTIONS_RUNNER_INPUT_JITCONFIG` from the environment.
+
+Direct jobs showed that `--vm-forward-env` fails while staging even a single variable into this Windows guest. Job 68215027 verified that command stdin reaches PowerShell, so the Windows backend uses a versioned, fixed-field stdin record instead; Linux retains selected-environment forwarding. No lease value is embedded in the batch script or guest command arguments.
+
+The unmodified `windows-rocm-10.1` template did not contain `C:\actions-runner`, `C:\slurm-gha`, `C:\runner`, or `C:\runner-logs`. A prepared derivative remains required before a real GitHub workflow can validate the full Windows path.
 
 ## VMoCS runner image result
 
