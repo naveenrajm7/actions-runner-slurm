@@ -87,8 +87,11 @@ func TestRenderVMoCSWindowsUsesPowerShellAndWindowsPaths(t *testing.T) {
 			t.Errorf("Windows script is missing %q:\n%s", want, rendered.Script)
 		}
 	}
-	if _, ok := rendered.Environment["PATH"]; ok {
-		t.Fatal("Linux PATH must not be injected into a Windows guest")
+	if rendered.Environment["PATH"] == "" {
+		t.Fatal("host PATH is required for the VMoCS helper")
+	}
+	if strings.Contains(rendered.Script, "--vm-forward-env=PATH") {
+		t.Fatal("host PATH must not be forwarded into a Windows guest")
 	}
 	if got := rendered.Environment["SLURM_GHA_CA_FILE"]; got != vmocsWindowsCallbackCAPath {
 		t.Fatalf("guest CA path = %q, want %q", got, vmocsWindowsCallbackCAPath)

@@ -1,0 +1,93 @@
+name: Slurm Pyxis, Linux VMoCS, and Windows Navi4 demo
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pyxis:
+    name: Pyxis CPU runner
+    runs-on: [slurm-cpu-small]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Pyxis allocation
+        shell: bash
+        env:
+          RUNNER_DISPLAY_NAME: ${{ runner.name }}
+        run: |
+          set -euo pipefail
+          test -n "${SLURM_JOB_ID:-}"
+          test "${GITHUB_ACTIONS:-}" = true
+          test -f pyproject.toml
+          printf 'runner=%s job=%s host=%s\n' \
+            "$RUNNER_DISPLAY_NAME" "$SLURM_JOB_ID" "$(hostname)"
+
+  vmocs-gpu:
+    name: VMoCS MI210 runner
+    runs-on: [slurm-gpu-small]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show VM and MI210 passthrough
+        shell: bash
+        env:
+          RUNNER_DISPLAY_NAME: ${{ runner.name }}
+        run: |
+          set -euo pipefail
+          test -n "${SLURM_JOB_ID:-}"
+          test "${GITHUB_ACTIONS:-}" = true
+          test -f pyproject.toml
+          printf 'runner=%s job=%s host=%s\n' \
+            "$RUNNER_DISPLAY_NAME" "$SLURM_JOB_ID" "$(hostname)"
+          lspci -nn | tee /tmp/lspci.txt
+          grep -Ei -m1 'Instinct MI210|1002:740f' /tmp/lspci.txt
+          if test -e /dev/kfd && command -v rocminfo >/dev/null 2>&1; then
+            ls -l /dev/kfd /dev/dri/renderD*
+            rocminfo | grep -E -m1 'Name:.*(gfx|AMD)'
+          else
+            echo '::warning::MI210 PCI passthrough is present, but this runner image does not provide ROCm compute access yet.'
+          fi
+
+  windows-navi4:
+    name: Windows Navi4 runner
+    runs-on: [slurm-windows-navi4]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Windows VM and Navi4 passthrough
+        shell: powershell
+        env:
+          RUNNER_DISPLAY_NAME: ${{ runner.name }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:SLURM_JOB_ID)) {
+            throw 'SLURM_JOB_ID is missing'
+          }
+          if ($env:GITHUB_ACTIONS -ne 'true') {
+            throw 'GITHUB_ACTIONS is not true'
+          }
+          if (-not (Test-Path -LiteralPath 'pyproject.toml' -PathType Leaf)) {
+            throw 'actions/checkout did not populate the repository'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:HIP_PATH)) {
+            throw 'HIP_PATH is missing'
+          }
+
+          $hipInfo = & (Join-Path $env:HIP_PATH 'bin\hipInfo.exe') 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0) {
+            throw "hipInfo.exe failed with exit code $LASTEXITCODE"
+          }
+          $hipInfo | Write-Host
+          if ($hipInfo -notmatch 'AMD Radeon AI PRO R9700') {
+            throw 'Navi4 R9700 GPU was not detected'
+          }
+          if ($hipInfo -notmatch 'gfx1201') {
+            throw 'gfx1201 architecture was not detected'
+          }
+          Write-Host "runner=$env:RUNNER_DISPLAY_NAME job=$env:SLURM_JOB_ID host=$env:COMPUTERNAME"

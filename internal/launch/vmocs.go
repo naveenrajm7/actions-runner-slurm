@@ -3,6 +3,7 @@ package launch
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -11,6 +12,7 @@ import (
 )
 
 const (
+	vmocsDefaultHostPath       = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 	vmocsLinuxBootstrapPath    = "/opt/slurm-gha/bootstrap.sh"
 	vmocsLinuxCallbackCAPath   = "/etc/slurm-gha/callback-ca.crt"
 	vmocsWindowsBootstrapPath  = `C:\slurm-gha\bootstrap.ps1`
@@ -49,11 +51,18 @@ func RenderVMoCS(service config.ServiceConfig, class config.ScaleSetConfig, leas
 	leaseRoot := filepath.Join(class.Execution.ScratchRoot, "slurm-gha", lease.ID)
 	logDir := filepath.Join(service.LogRoot, class.Name, lease.ID)
 	forward := append([]string(nil), vmocsForwardEnvironment...)
+	hostPath := os.Getenv("PATH")
+	if hostPath == "" {
+		hostPath = vmocsDefaultHostPath
+	}
 	environment := map[string]string{
 		"SLURM_GHA_SERVICE_URL": strings.TrimSuffix(service.PublicURL, "/"),
 		"SLURM_GHA_LEASE_ID":    lease.ID,
 		"SLURM_GHA_CLASS":       class.Name,
 		"SLURM_GHA_CLAIM_TOKEN": claimToken,
+		// PATH is for the Slurm step and its VMoCS helper. It is deliberately
+		// absent from vmocsForwardEnvironment, so Windows never receives it.
+		"PATH": hostPath,
 	}
 	guestOS := class.Execution.GuestOS
 	if guestOS == "" {
@@ -62,7 +71,6 @@ func RenderVMoCS(service config.ServiceConfig, class config.ScaleSetConfig, leas
 	bootstrapCommand := []string{vmocsLinuxBootstrapPath}
 	callbackCAPath := vmocsLinuxCallbackCAPath
 	if guestOS == config.GuestOSLinux {
-		environment["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 	} else if guestOS == config.GuestOSWindows {
 		bootstrapCommand = []string{
 			"powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-File", vmocsWindowsBootstrapPath,

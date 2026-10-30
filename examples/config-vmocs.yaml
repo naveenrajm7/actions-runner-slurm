@@ -52,3 +52,26 @@ scaleSets:
       # VMoCS template name, passed to srun as --vm-image=base-ubuntu.
       image: "base-ubuntu"
       scratchRoot: "/scratch/github-ci"
+
+  - name: "slurm-windows-navi4"
+    runnerGroup: "slurm-ci"
+    maxRunners: 1
+    maxPending: 1
+    maxQueueWait: "15m"
+    startupTimeout: "15m"
+    slurm:
+      partition: "vm"
+      account: "vm"
+      qos: "normal"
+      nodes: 1
+      tasks: 1
+      cpusPerTask: 8
+      memory: "16G"
+      # Select a Navi4 host without hard-coding a node name.
+      gres: "gpu:gfx1201:1"
+      walltime: "00:28:00"
+    execution:
+      mode: "vmocs"
+      guestOS: "windows"
+      image: "windows-rocm-10.1-actions-runner"
+      scratchRoot: "/scratch/github-ci/windows"
