@@ -15,7 +15,7 @@ The implementation currently includes:
 - HTTPS claim, health, and readiness endpoints;
 - `serve`, `validate-config`, `doctor`, `status`, `generate-key`, and `slurm-smoke` commands.
 
-The first cluster contract was verified on October 4, 2026: a REST-submitted Slurm 24.11.5 allocation launched a squashfs image with Pyxis 0.21.0 / Enroot 4.0.1, reached `github.com:443`, exited zero, and released the allocation. On October 8, VMoCS 0.1.3 launched the prepared Ubuntu VM, forwarded the complete callback environment, claimed a real GitHub JIT configuration over verified HTTPS, and executed a private-repository workflow successfully with runner v2.337.0. See [the compatibility record](docs/compatibility.md).
+The first cluster contract was verified on October 4, 2026: a REST-submitted Slurm 24.11.5 allocation launched a squashfs image with Pyxis 0.21.0 / Enroot 4.0.1, reached `github.com:443`, exited zero, and released the allocation. On October 8, VMoCS launched the prepared Ubuntu VM, forwarded the complete callback environment, claimed a real GitHub JIT configuration over verified HTTPS, and executed a private-repository workflow successfully with runner v2.337.0. See [the compatibility record](docs/compatibility.md).
 
 ## Build and test
 
@@ -74,7 +74,7 @@ See [execution modes](docs/execution-modes.md) for configuration and launch beha
 
 The image definition in [images/runner/Dockerfile](images/runner/Dockerfile) packages official Actions runner v2.337.0 and [the bootstrap](images/runner/bootstrap.sh) for Pyxis. A Linux VMoCS guest uses the same layout. A Windows VMoCS guest selected with `guestOS: windows` instead provides `C:\actions-runner` and [bootstrap.ps1](images/runner-vm/bootstrap.ps1) at `C:\slurm-gha\bootstrap.ps1`. Both bootstraps copy the distribution into a fresh writable directory, claim JIT over HTTPS, supply it through `ACTIONS_RUNNER_INPUT_JITCONFIG`, then remove the claim material before starting the runner.
 
-A Pyxis image must be imported to a site-readable squashfs path. A VMoCS template must be available on eligible compute nodes. Linux guests require VMoCS 0.1.3 or newer for repeatable selected-environment forwarding. Windows guests require a VMoCS release containing [secure Windows environment forwarding](https://github.com/naveenrajm7/vmocs/pull/26), plus a template configured with `ssh-command-style: windows`, `boot-mode: vagrant`, and `insert-key: true`. Docker-dependent Actions features are not supplied by either mode.
+A Pyxis image must be imported to a site-readable squashfs path. A VMoCS template must be available on eligible compute nodes. Windows templates use `ssh-command-style: windows`, `boot-mode: vagrant`, and `insert-key: true`. Docker-dependent Actions features are not supplied by either mode.
 
 ## Configuration
 

@@ -29,7 +29,7 @@ Your site must provide:
 - A Slurm cluster with `slurmrestd` enabled.
 - A supported REST data parser. The first verified contract is `v0.0.42` with Slurm 24.11.5.
 - A dedicated Slurm user and a renewable JWT that can submit, inspect, and cancel that user's jobs.
-- At least one implemented execution backend on eligible compute nodes: Pyxis/Enroot for container classes or VMoCS 0.1.2 or newer for VM classes.
+- At least one implemented execution backend on eligible compute nodes: Pyxis/Enroot for container classes or VMoCS for VM classes.
 - A partition, account, and optional QOS available to the service user.
 - Exactly one node and one task per runner allocation. Multi-node and multi-task runners are not supported in `v1alpha1`.
 

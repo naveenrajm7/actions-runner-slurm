@@ -63,7 +63,7 @@ This submits a small allocation and verifies Pyxis startup, DNS, outbound TCP/44
 
 ## Prepare a VMoCS guest
 
-Use VMoCS 0.1.2 or newer and prepare the selected template with:
+Prepare the selected VMoCS template with:
 
 - Linux x86-64 for the currently pinned runner, or a runner distribution matching the guest architecture.
 - Official Actions runner v2.337.0 extracted at `/opt/actions-runner`; `bin/Runner.Listener` and `run.sh` must be executable.
@@ -99,7 +99,7 @@ sudo -u github-ci /usr/local/bin/slurm-gha slurm-smoke \
   --require-runner
 ```
 
-This test launches the VM, checks DNS and GitHub TCP/443, and validates the runner/bootstrap files. Both Linux and Windows verify a nonce and `SLURM_JOB_ID` through repeated `--vm-forward-env` options. Windows requires a VMoCS release containing [secure Windows forwarding](https://github.com/naveenrajm7/vmocs/pull/26). It does not claim a GitHub runner. The next validation step is a disposable end-to-end workflow.
+This test launches the VM, checks DNS and GitHub TCP/443, and validates the runner/bootstrap files. Both Linux and Windows verify a nonce and `SLURM_JOB_ID` through repeated `--vm-forward-env` options. It does not claim a GitHub runner. The next validation step is a disposable end-to-end workflow.
 
 <Note variant="warning">
   `slurm.out` and `slurm.err` persist on the host. Runner `_diag` copied to `/runner-logs` remains inside the disposable VM in the initial implementation.

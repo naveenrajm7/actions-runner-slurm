@@ -143,7 +143,7 @@ If the problem persists, open a GitHub issue with secrets removed and include th
 
 Run `slurm-smoke --mode vmocs --require-runner` first. Confirm that:
 
-- the compute nodes expose `--vm-image` and preserve repeated `--vm-forward-env` selections; Windows requires a VMoCS release containing secure Windows forwarding;
+- the compute nodes expose `--vm-image` and preserve repeated `--vm-forward-env` selections;
 - Linux has executable `/opt/actions-runner/bin/Runner.Listener` and `/opt/slurm-gha/bootstrap.sh`; Windows has `C:\actions-runner\bin\Runner.Listener.exe` and `C:\slurm-gha\bootstrap.ps1`;
 - Linux has writable `/runner` and `/runner-logs`; Windows has writable `C:\runner` and `C:\runner-logs`;
 - the guest can resolve GitHub and reach both GitHub TCP/443 and `service.publicUrl`;

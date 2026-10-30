@@ -58,7 +58,7 @@ srun --nodes=1 --ntasks=1 --cpus-per-task=2 --kill-on-bad-exit=1 --export=ALL \
 
 If `service.tls.caFile` is configured, it also forwards `SLURM_GHA_CA_FILE=/etc/slurm-gha/callback-ca.crt`. Unlike Pyxis, VMoCS does not receive the host CA file through a dynamic bind mount; the guest image must contain that certificate at the fixed path.
 
-The step receives `scaleSets[].slurm.cpusPerTask` explicitly so the VM gets the requested vCPU count rather than the nested `srun` default. The claim token remains in the Slurm job environment and out of the batch script and SSH command arguments. Both operating systems depend on repeatable `--vm-forward-env=NAME` support across the allocator and remote SPANK contexts. Windows additionally requires the secure Windows forwarding implementation from [VMoCS PR #26](https://github.com/naveenrajm7/vmocs/pull/26).
+The step receives `scaleSets[].slurm.cpusPerTask` explicitly so the VM gets the requested vCPU count rather than the nested `srun` default. The claim token remains in the Slurm job environment and out of the batch script and SSH command arguments. Both operating systems use repeatable `--vm-forward-env=NAME` selections across the allocator and remote SPANK contexts.
 
 `mountHome` and `extraMounts` are Pyxis-only and configuration validation rejects them in `vmocs` mode. VMoCS template-level storage and device policy remain site-admin concerns.
 

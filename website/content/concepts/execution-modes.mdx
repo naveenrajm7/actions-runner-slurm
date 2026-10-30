@@ -52,7 +52,7 @@ The backend asks the VMoCS SPANK plugin to boot the template and securely forwar
 Follow [prepare a runner image](/getting-started/runner-image/) for the guest filesystem, dependencies, permissions, private CA, and smoke-test checklist.
 
 <Note variant="warning">
-  Both guest types require a site plugin that preserves repeated `--vm-forward-env` options. Windows additionally requires a VMoCS release containing [secure Windows forwarding](https://github.com/naveenrajm7/vmocs/pull/26), a prepared runner image, and template settings `ssh-command-style: windows`, `boot-mode: vagrant`, and `insert-key: true`.
+  Both guest types use repeated `--vm-forward-env` selections. Windows additionally requires a prepared runner image and template settings `ssh-command-style: windows`, `boot-mode: vagrant`, and `insert-key: true`.
 </Note>
 
 ## Native host mode

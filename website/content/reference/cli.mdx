@@ -114,7 +114,7 @@ Both modes require `--base-url`, `--user`, `--token-file`, `--account`, and the 
 | `--timeout` | `5m` | Maximum wait for the allocation. |
 | `--require-runner` | `false` | Also verify the official runner and bootstrap files in the image. |
 
-The VMoCS smoke path forwards a nonce and `SLURM_JOB_ID` with repeated `--vm-forward-env` options and verifies both inside either guest type. This directly exercises the production forwarding path; Windows requires a VMoCS release containing [secure Windows forwarding](https://github.com/naveenrajm7/vmocs/pull/26). The command prints the submitted job ID and the directory containing `slurm.out` and `slurm.err`.
+The VMoCS smoke path forwards a nonce and `SLURM_JOB_ID` with repeated `--vm-forward-env` options and verifies both inside either guest type. This directly exercises the production forwarding path. The command prints the submitted job ID and the directory containing `slurm.out` and `slurm.err`.
 
 ## `version`
 
