@@ -31,6 +31,7 @@ The backend mounts private runner work and persistent diagnostics, disables the 
 ```yaml
 execution:
   mode: "vmocs"
+  guestOS: "linux"
   image: "base-ubuntu"
   scratchRoot: "/shared/slurm-gha/scratch"
 ```
@@ -44,14 +45,14 @@ The backend asks the VMoCS SPANK plugin to boot the template and securely forwar
 - `SLURM_JOB_ID`
 - `SLURM_GHA_CA_FILE` when a private callback CA is configured
 
-It then runs `/opt/slurm-gha/bootstrap.sh` inside the VM. Values remain out of the batch script and SSH command arguments. This requires VMoCS 0.1.2 or newer and its repeatable `--vm-forward-env=NAME` option.
+`guestOS` defaults to `linux`, which runs `/opt/slurm-gha/bootstrap.sh`. Set `guestOS: windows` to run `powershell.exe -NoLogo -NoProfile -NonInteractive -File C:\slurm-gha\bootstrap.ps1`; that path also selects the Windows callback CA path and avoids injecting a Linux `PATH`. Both paths use repeatable VMoCS `--vm-forward-env` selections, keeping values out of the batch script and SSH command arguments while preserving the guest command's stdin.
 
 `mountHome` and `extraMounts` are Pyxis-only; configuration validation rejects them for VMoCS. VM devices, disks, and other template policy remain in VMoCS configuration.
 
 Follow [prepare a runner image](/getting-started/runner-image/) for the guest filesystem, dependencies, permissions, private CA, and smoke-test checklist.
 
 <Note variant="warning">
-  The prepared runner image contract has been validated, but a complete GitHub Actions workflow still requires a site VMoCS plugin that preserves repeated `--vm-forward-env` options.
+  Both guest types use repeated `--vm-forward-env` selections. Windows additionally requires a prepared runner image and template settings `ssh-command-style: windows`, `boot-mode: vagrant`, and `insert-key: true`.
 </Note>
 
 ## Native host mode

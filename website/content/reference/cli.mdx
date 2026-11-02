@@ -103,6 +103,7 @@ Both modes require `--base-url`, `--user`, `--token-file`, `--account`, and the 
 | Flag | Default | Description |
 | --- | --- | --- |
 | `--mode` | `pyxis` | Execution backend: `pyxis` or `vmocs`. Native is not implemented. |
+| `--guest-os` | `linux` | VMoCS guest operating system: `linux` or `windows`. |
 | `--image` | Empty | Required Pyxis image reference or SquashFS path. |
 | `--vm-image` | Empty | Required VMoCS template name. |
 | `--api-version` | `v0.0.42` | Slurm REST data parser. |
@@ -113,7 +114,7 @@ Both modes require `--base-url`, `--user`, `--token-file`, `--account`, and the 
 | `--timeout` | `5m` | Maximum wait for the allocation. |
 | `--require-runner` | `false` | Also verify the official runner and bootstrap files in the image. |
 
-The VMoCS smoke path also forwards both a nonce and `SLURM_JOB_ID` by name and verifies them inside the guest. This deliberately checks that repeated `--vm-forward-env` options work, because the production backend forwards several bootstrap variables. The command prints the submitted job ID and the directory containing `slurm.out` and `slurm.err`.
+The VMoCS smoke path forwards a nonce and `SLURM_JOB_ID` with repeated `--vm-forward-env` options and verifies both inside either guest type. This directly exercises the production forwarding path. The command prints the submitted job ID and the directory containing `slurm.out` and `slurm.err`.
 
 ## `version`
 

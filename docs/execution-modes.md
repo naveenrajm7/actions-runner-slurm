@@ -5,7 +5,7 @@ Every scale set selects one launch backend with `scaleSets[].execution.mode`. Th
 | Mode | Slurm launch plugin | `execution.image` means | Status |
 | --- | --- | --- | --- |
 | `pyxis` | Pyxis/Enroot | OCI reference or shared SquashFS path | Implemented and end-to-end verified |
-| `vmocs` | VMoCS | VMoCS template name passed to `--vm-image` | Implemented and end-to-end workflow verified |
+| `vmocs` | VMoCS | VMoCS template name passed to `--vm-image` | Linux end-to-end verified; Windows bootstrap and transport verified |
 | `native` | None | Not used | Reserved and rejected at service startup |
 
 ## Pyxis container mode
@@ -26,9 +26,22 @@ The launcher mounts a private lease directory at `/runner`, a persistent diagnos
 ```yaml
 execution:
   mode: "vmocs"
+  guestOS: "linux"
   image: "base-ubuntu"
   scratchRoot: "/shared/slurm-gha/scratch"
 ```
+
+`guestOS` defaults to `linux` for backward compatibility. A Windows template uses:
+
+```yaml
+execution:
+  mode: vmocs
+  guestOS: windows
+  image: windows-rocm-10.1-actions-runner
+  scratchRoot: /scratch/users/nmuthura/slurm-gha-windows
+```
+
+Windows runs `powershell.exe -NoLogo -NoProfile -NonInteractive -File C:\slurm-gha\bootstrap.ps1`, uses `C:\slurm-gha\callback-ca.cer` for a private callback CA, and does not receive a Linux `PATH` override. VMoCS securely stages the selected environment over a separate SSH connection, so the bootstrap receives ordinary process environment variables and retains its original stdin. Credentials remain absent from the batch script and command line.
 
 The launcher invokes a one-task step equivalent to:
 
@@ -45,7 +58,7 @@ srun --nodes=1 --ntasks=1 --cpus-per-task=2 --kill-on-bad-exit=1 --export=ALL \
 
 If `service.tls.caFile` is configured, it also forwards `SLURM_GHA_CA_FILE=/etc/slurm-gha/callback-ca.crt`. Unlike Pyxis, VMoCS does not receive the host CA file through a dynamic bind mount; the guest image must contain that certificate at the fixed path.
 
-The step receives `scaleSets[].slurm.cpusPerTask` explicitly so the VM gets the requested vCPU count rather than the nested `srun` default. The claim token remains in the Slurm job environment and out of the batch script and SSH command arguments. VMoCS 0.1.3 or newer is required because the launcher depends on repeatable `--vm-forward-env=NAME` support across the allocator and remote SPANK contexts. VMoCS limits a step to 16 selected variables; this integration currently uses five, or six with a private callback CA.
+The step receives `scaleSets[].slurm.cpusPerTask` explicitly so the VM gets the requested vCPU count rather than the nested `srun` default. The claim token remains in the Slurm job environment and out of the batch script and SSH command arguments. Both operating systems use repeatable `--vm-forward-env=NAME` selections across the allocator and remote SPANK contexts.
 
 `mountHome` and `extraMounts` are Pyxis-only and configuration validation rejects them in `vmocs` mode. VMoCS template-level storage and device policy remain site-admin concerns.
 
@@ -65,6 +78,8 @@ Prepare the VMoCS template with all of the following:
 - The SSH/cloud-init setup required by the VMoCS template so its attached command executes as the intended guest user.
 - A system or service-user VMoCS template definition available to the Slurm identity on every eligible compute node; another user's private template is not sufficient.
 
+For a Windows guest, install the Windows x64 runner at `C:\actions-runner`, [bootstrap.ps1](../images/runner-vm/bootstrap.ps1) at `C:\slurm-gha\bootstrap.ps1`, create writable `C:\runner` and `C:\runner-logs`, and install the callback CA at `C:\slurm-gha\callback-ca.cer` when configured. The image must provide `powershell.exe` and `curl.exe`. Configure its VMoCS template with `ssh-command-style: windows`, `boot-mode: vagrant`, and `insert-key: true`.
+
 Do not bake the GitHub App key, Slurm JWT, JIT encryption key, claim token, or JIT configuration into the image. The one-use claim token is delivered only for the allocation and unset before the runner starts.
 
 The initial VMoCS backend retains `slurm.out` and `slurm.err` under `service.logRoot`. Runner `_diag` files copied to `/runner-logs` remain inside the disposable VM and are not retained after teardown. A future diagnostics export must use a per-allocation mechanism; a shared writable guest mount would risk cross-runner collisions.
@@ -74,6 +89,7 @@ The initial VMoCS backend retains `slurm.out` and `slurm.err` under `service.log
 ```bash
 sudo -u github-ci /usr/local/bin/slurm-gha slurm-smoke \
   --mode vmocs \
+  --guest-os linux \
   --base-url https://slurm-api.example.org \
   --user github-ci \
   --token-file /run/secrets/slurm-jwt \
@@ -86,7 +102,7 @@ sudo -u github-ci /usr/local/bin/slurm-gha slurm-smoke \
   --require-runner
 ```
 
-This verifies VM launch, repeatable selected-variable forwarding (a smoke nonce and `SLURM_JOB_ID`), guest DNS, GitHub TCP/443 egress, the runner distribution, and the bootstrap path. It does not claim a real GitHub runner. After it passes, configure a disposable scale set and run an end-to-end workflow.
+This verifies VM launch, repeated selected-variable forwarding, guest DNS, GitHub TCP/443 egress, the runner distribution, and the bootstrap path. `--guest-os windows` exercises VMoCS's native Windows forwarding path. It does not claim a real GitHub runner. After it passes, configure a disposable scale set and run an end-to-end workflow.
 
 ## Native mode
 

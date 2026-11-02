@@ -26,6 +26,6 @@ JIT is returned with `Cache-Control: no-store`. A response cached for retry is e
 
 Pyxis/Enroot and VMoCS provide disposable environments, not a complete hostile multi-tenant boundary. Workflow code ultimately runs under the site policy attached to the Slurm identity, container mounts or VM template, assigned devices, and reachable cluster services. Initial use is restricted to trusted private repositories, runner-group policy, and a dedicated service identity.
 
-The bootstrap callback always uses HTTPS. When `service.tls.caFile` is configured, the Pyxis launcher mounts that CA certificate read-only into the runner container. The VMoCS launcher instead points curl at `/etc/slurm-gha/callback-ca.crt`, which must be installed in the guest image. TLS verification is never disabled.
+The bootstrap callback always uses HTTPS. When `service.tls.caFile` is configured, the Pyxis launcher mounts that CA certificate read-only into the runner container. The VMoCS launcher instead points curl at `/etc/slurm-gha/callback-ca.crt` for Linux or `C:\slurm-gha\callback-ca.cer` for Windows; the selected certificate must be installed in the guest image. Both guest types receive only explicitly selected values through VMoCS environment forwarding. TLS verification is never disabled.
 
 Docker container actions, job containers, and service containers are outside the initial boundary.

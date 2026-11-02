@@ -3,6 +3,7 @@ package launch
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -11,8 +12,11 @@ import (
 )
 
 const (
-	vmocsBootstrapPath  = "/opt/slurm-gha/bootstrap.sh"
-	vmocsCallbackCAPath = "/etc/slurm-gha/callback-ca.crt"
+	vmocsDefaultHostPath       = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+	vmocsLinuxBootstrapPath    = "/opt/slurm-gha/bootstrap.sh"
+	vmocsLinuxCallbackCAPath   = "/etc/slurm-gha/callback-ca.crt"
+	vmocsWindowsBootstrapPath  = `C:\slurm-gha\bootstrap.ps1`
+	vmocsWindowsCallbackCAPath = `C:\slurm-gha\callback-ca.cer`
 )
 
 var vmocsForwardEnvironment = []string{
@@ -47,15 +51,36 @@ func RenderVMoCS(service config.ServiceConfig, class config.ScaleSetConfig, leas
 	leaseRoot := filepath.Join(class.Execution.ScratchRoot, "slurm-gha", lease.ID)
 	logDir := filepath.Join(service.LogRoot, class.Name, lease.ID)
 	forward := append([]string(nil), vmocsForwardEnvironment...)
+	hostPath := os.Getenv("PATH")
+	if hostPath == "" {
+		hostPath = vmocsDefaultHostPath
+	}
 	environment := map[string]string{
-		"PATH":                  "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 		"SLURM_GHA_SERVICE_URL": strings.TrimSuffix(service.PublicURL, "/"),
 		"SLURM_GHA_LEASE_ID":    lease.ID,
 		"SLURM_GHA_CLASS":       class.Name,
 		"SLURM_GHA_CLAIM_TOKEN": claimToken,
+		// PATH is for the Slurm step and its VMoCS helper. It is deliberately
+		// absent from vmocsForwardEnvironment, so Windows never receives it.
+		"PATH": hostPath,
+	}
+	guestOS := class.Execution.GuestOS
+	if guestOS == "" {
+		guestOS = config.GuestOSLinux
+	}
+	bootstrapCommand := []string{vmocsLinuxBootstrapPath}
+	callbackCAPath := vmocsLinuxCallbackCAPath
+	if guestOS == config.GuestOSLinux {
+	} else if guestOS == config.GuestOSWindows {
+		bootstrapCommand = []string{
+			"powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-File", vmocsWindowsBootstrapPath,
+		}
+		callbackCAPath = vmocsWindowsCallbackCAPath
+	} else {
+		return RenderedJob{}, fmt.Errorf("unsupported VMoCS guest OS %q", guestOS)
 	}
 	if service.TLS.CAFile != "" {
-		environment["SLURM_GHA_CA_FILE"] = vmocsCallbackCAPath
+		environment["SLURM_GHA_CA_FILE"] = callbackCAPath
 		forward = append(forward, "SLURM_GHA_CA_FILE")
 	}
 
@@ -68,10 +93,12 @@ func RenderVMoCS(service config.ServiceConfig, class config.ScaleSetConfig, leas
 	for _, name := range forward {
 		args = append(args, "--vm-forward-env="+name)
 	}
-	args = append(args, vmocsBootstrapPath)
+	args = append(args, bootstrapCommand...)
 	for i := range args {
 		args[i] = shellQuote(args[i])
 	}
+
+	command := strings.Join(args, " ")
 
 	script := fmt.Sprintf(`#!/usr/bin/env bash
 set -uo pipefail
@@ -91,7 +118,7 @@ case "$lease_root" in
   *) printf 'refusing unsafe scratch cleanup: %%s\n' "$lease_root" >&2; status=125 ;;
 esac
 exit "$status"
-`, shellQuote(leaseRoot), shellQuote(logDir), strings.Join(args, " "), shellQuote(class.Execution.ScratchRoot), lease.ID)
+`, shellQuote(leaseRoot), shellQuote(logDir), command, shellQuote(class.Execution.ScratchRoot), lease.ID)
 
 	return RenderedJob{
 		Script: script, WorkingDirectory: class.Execution.ScratchRoot,

@@ -14,9 +14,9 @@ The first cluster contract was observed and tested on October 4, 2026.
 | REST authentication | `X-SLURM-USER-NAME` and renewable JWT in `X-SLURM-USER-TOKEN` |
 | Pyxis | 0.21.0 |
 | Enroot | 4.0.1 |
-| VMoCS | 0.1.3; repeated selected-variable forwarding and an end-to-end workflow pass |
+| VMoCS | Native Linux and Windows forwarding; Linux end-to-end workflow pass |
 | GitHub scale-set client | `github.com/actions/scaleset` v0.4.0 |
-| Actions runner | v2.337.0, Linux x64 |
+| Actions runner | v2.337.0, Linux x64 and Windows x64 |
 | Runner base | Ubuntu 24.04 pinned by image digest |
 | Go toolchain used by the project | 1.27.1 |
 
@@ -33,11 +33,13 @@ The development cluster verified:
 - Complete private-repository workflows in both Pyxis and VMoCS modes using `runs-on: slurm-cpu-small`.
 - JIT claim, ephemeral runner registration, repository checkout, job completion, runner deregistration, and Slurm cleanup.
 
-On October 8, 2026, VMoCS 0.1.3 and the corrected SPANK plugin passed repeated selected-variable forwarding. A REST smoke then booted template `actions-runner-ubuntu-24.04` with 2 vCPUs, validated runner `2.337.0`, its matching bootstrap, GitHub egress, and the callback CA baked at `/etc/slurm-gha/callback-ca.crt`.
+On October 8, 2026, VMoCS passed repeated selected-variable forwarding. A REST smoke then booted template `actions-runner-ubuntu-24.04` with 2 vCPUs, validated runner `2.337.0`, its matching bootstrap, GitHub egress, and the callback CA baked at `/etc/slurm-gha/callback-ca.crt`.
 
 A live integration job used the production renderer and claim handler, authenticated over HTTPS, obtained a real GitHub JIT configuration, and brought an ephemeral runner to `Listening for Jobs`.
 
 A push-triggered workflow in a selected private repository then completed the VMoCS path. The listener submitted a Slurm allocation, the VM claimed and registered an ephemeral runner, and the validation job succeeded. Slurm recorded `COMPLETED`, exit code `0:0`; the runner deregistered automatically and no allocation remained queued.
+
+On October 30, 2026, template `windows-rocm-10.1` booted successfully with PowerShell 5.1, GitHub egress, and an AMD Radeon AI PRO R9700 (`gfx1201`). A disposable runner v2.337.0 passed native Windows environment forwarding and the bootstrap's HTTPS claim, JIT environment, cleanup, diagnostics, and exit-status checks. The base template still lacks the permanent runner/bootstrap payload, so a prepared derivative is required for a complete GitHub Actions workflow.
 
 ## REST endpoint behavior
 

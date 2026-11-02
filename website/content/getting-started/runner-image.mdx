@@ -5,7 +5,7 @@ menu-position: 5
 keywords: ['runner image', 'Pyxis', 'Enroot', 'SquashFS', 'VMoCS', 'virtual machine']
 ---
 
-Every allocation needs the official GitHub Actions runner and the Actions Runner Slurm bootstrap script. Pyxis reads them from an immutable container image; VMoCS reads them from its guest template. The provided container definition and initial VM contract are Linux x86-64.
+Every allocation needs the official GitHub Actions runner and the Actions Runner Slurm bootstrap script. Pyxis reads them from an immutable container image; VMoCS reads them from its guest template. Pyxis uses Linux x86-64; VMoCS supports Linux and Windows guests.
 
 <Note variant="warning">
   Choose the backend first. Pyxis is end-to-end verified; VMoCS support is implemented but still awaits a complete GitHub workflow test. See [execution modes](/concepts/execution-modes/).
@@ -63,7 +63,7 @@ This submits a small allocation and verifies Pyxis startup, DNS, outbound TCP/44
 
 ## Prepare a VMoCS guest
 
-Use VMoCS 0.1.2 or newer and prepare the selected template with:
+Prepare the selected VMoCS template with:
 
 - Linux x86-64 for the currently pinned runner, or a runner distribution matching the guest architecture.
 - Official Actions runner v2.337.0 extracted at `/opt/actions-runner`; `bin/Runner.Listener` and `run.sh` must be executable.
@@ -78,11 +78,14 @@ Use VMoCS 0.1.2 or newer and prepare the selected template with:
 
 Do not put the GitHub App key, Slurm JWT, JIT encryption key, claim token, or JIT configuration in the image.
 
+For `guestOS: windows`, install the Windows x64 runner at `C:\actions-runner`, `images/runner-vm/bootstrap.ps1` at `C:\slurm-gha\bootstrap.ps1`, and create writable `C:\runner` and `C:\runner-logs`. Install a configured private callback CA at `C:\slurm-gha\callback-ca.cer`. The image must provide `powershell.exe` and `curl.exe`. Configure its VMoCS template with `ssh-command-style: windows`, `boot-mode: vagrant`, and `insert-key: true`. The cluster's `windows-rocm-10.1` base template does not contain this runner payload; publish a prepared derivative such as `windows-rocm-10.1-actions-runner` before enabling it in the service.
+
 ## Test VMoCS and environment forwarding
 
 ```bash
 sudo -u github-ci /usr/local/bin/slurm-gha slurm-smoke \
   --mode vmocs \
+  --guest-os linux \
   --base-url https://slurm-api.example.org \
   --api-version v0.0.42 \
   --user github-ci \
@@ -96,7 +99,7 @@ sudo -u github-ci /usr/local/bin/slurm-gha slurm-smoke \
   --require-runner
 ```
 
-This test launches the VM, forwards and verifies a nonce through `--vm-forward-env`, checks DNS and GitHub TCP/443, and validates the runner/bootstrap files. It does not claim a GitHub runner. The next validation step is a disposable end-to-end workflow.
+This test launches the VM, checks DNS and GitHub TCP/443, and validates the runner/bootstrap files. Both Linux and Windows verify a nonce and `SLURM_JOB_ID` through repeated `--vm-forward-env` options. It does not claim a GitHub runner. The next validation step is a disposable end-to-end workflow.
 
 <Note variant="warning">
   `slurm.out` and `slurm.err` persist on the host. Runner `_diag` copied to `/runner-logs` remains inside the disposable VM in the initial implementation.
